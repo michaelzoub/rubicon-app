@@ -70,6 +70,10 @@ export default function OverviewPage() {
     () => buildTrend(activity.data ?? [], "earnings"),
     [activity.data],
   );
+  const wordsTrendBars = useMemo(
+    () => buildTrend(activity.data ?? [], "words"),
+    [activity.data],
+  );
   const earningsSlices = useMemo(() => buildEarningsSlices(articles.data ?? []), [articles.data]);
   const hasBreakdown = earningsSlices.length > 0;
 
@@ -127,9 +131,19 @@ export default function OverviewPage() {
       },
       activityCalendar: buildActivityCalendar(activity.data ?? []),
       stats: [
-        { label: "Total earnings", value: totalEarned, format: formatUsdDisplay, deltaPct: weeklyDeltas.earnings },
-        { label: "Words read", value: earnings.data.wordsPaidFor ?? 0, format: formatInt, deltaPct: weeklyDeltas.words },
+        { label: "Total earnings", value: totalEarned, format: formatUsdDisplay, deltaPct: weeklyDeltas.earnings, sparklineValues: trendBars.map((b) => b.value) },
+        { label: "Words read", value: earnings.data.wordsPaidFor ?? 0, format: formatInt, deltaPct: weeklyDeltas.words, sparklineValues: wordsTrendBars.map((b) => b.value) },
         { label: "Live articles", value: earnings.data.liveArticles ?? 0, format: formatInt },
+        {
+          label: "Payout wallet",
+          value: nativeBalance.status === "success" && nativeBalance.value ? Number(nativeBalance.value) : 0,
+          format: (v) => {
+            if (nativeBalance.status === "loading") return "Loading...";
+            if (nativeBalance.status === "error") return "Unavailable";
+            if (nativeBalance.status !== "success" || !nativeBalance.value) return "0";
+            return `${formatBalance(nativeBalance.value)} ${nativeBalance.symbol}`;
+          },
+        },
       ],
       trendBars,
       topArticles: [...articleList]
@@ -173,6 +187,7 @@ export default function OverviewPage() {
     onboardingComplete,
     totalEarned,
     trendBars,
+    wordsTrendBars,
     user?.twitter?.profilePictureUrl,
     wallet.data,
     weeklyDeltas.earnings,

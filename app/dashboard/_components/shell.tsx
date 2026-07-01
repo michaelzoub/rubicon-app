@@ -235,9 +235,9 @@ function Sidebar({
       ) : (
         <>
           <div className="dashboard-sidebar-chrome">
-            <Link href="/" className="min-w-0" aria-label="Rubicon home">
+            <a href="https://rubiconpay.xyz" className="min-w-0" aria-label="Rubicon home">
               <RubiconBrand className="h-7" onLight src="/w_logo.svg" />
-            </Link>
+            </a>
             <button type="button" onClick={onToggle} className="dashboard-icon-button" aria-label="Close sidebar" aria-expanded={true}>
               <PanelLeft size={15} aria-hidden="true" />
             </button>
@@ -293,9 +293,9 @@ function MobileBar({ onLogout, activePath }: { onLogout?: () => void; activePath
   return (
     <div className="sticky top-0 z-30 border-b border-[var(--line)] bg-white/90 backdrop-blur lg:hidden">
       <div className="flex items-center justify-between px-5 py-3">
-        <Link href="/" className="flex items-center" aria-label="Rubicon home">
+        <a href="https://rubiconpay.xyz" className="flex items-center" aria-label="Rubicon home">
           <RubiconBrand className="h-7" onLight src="/w_logo.svg" />
-        </Link>
+        </a>
         {onLogout && (
           <button type="button" onClick={onLogout} className="text-[var(--muted)]" aria-label="Sign out">
             <LogOut size={18} aria-hidden="true" />

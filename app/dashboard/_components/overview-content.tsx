@@ -21,7 +21,7 @@ import {
 import type { ArticleState, PaymentStatus } from "@/lib/rubicon/types";
 import { formatUsdDisplay } from "@/lib/rubicon/pricing";
 import { RubiconBrand } from "../../_components/rubicon-brand";
-import { CountUp, Donut, InsightTile, Reveal, TrendChart, type DonutSlice, type TrendBar } from "./charts";
+import { CountUp, Donut, InsightTile, Reveal, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
 import {
   ArticleStatePill,
   Card,
@@ -40,6 +40,7 @@ export interface DashboardOverviewStat {
   value: number;
   format: (value: number) => string;
   deltaPct?: number | null;
+  sparklineValues?: number[];
 }
 
 export interface DashboardOverviewPaymentRow {
@@ -142,13 +143,16 @@ export function DashboardOverviewContent({
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
         <div className="grid min-w-0 gap-3">
-          <div className="grid items-stretch gap-3 sm:grid-cols-3">
+          <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {stats.map((stat, index) => (
               <Reveal key={stat.label} delay={index * 0.035} className="h-full">
                 <StatTile
                   label={stat.label}
                   value={<CountUp value={stat.value} format={stat.format} />}
                   hint={stat.deltaPct !== undefined ? <DeltaHint pct={stat.deltaPct} /> : undefined}
+                  sparkline={stat.sparklineValues && stat.sparklineValues.length > 1 ? (
+                    <Sparkline values={stat.sparklineValues} height={32} />
+                  ) : undefined}
                 />
               </Reveal>
             ))}
@@ -218,8 +222,8 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
         {/* main column */}
         <div className="grid min-w-0 gap-3">
           {/* stat tiles */}
-          <div className="grid gap-3 sm:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i} className="grid min-h-[108px] content-between gap-6 p-4">
                 <Skeleton className="h-3.5 w-20" />
                 <Skeleton className="h-7 w-28" />

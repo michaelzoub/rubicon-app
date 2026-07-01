@@ -261,6 +261,85 @@ export function Donut({
   );
 }
 
+/* ---------- sparkline ---------- */
+
+/**
+ * Smooth SVG sparkline drawn at the bottom of a stat card. Uses a monotone
+ * cubic interpolation so the curve never overshoots the data — important when
+ * the series has sharp jumps (e.g. a single large payment).
+ */
+export function Sparkline({
+  values,
+  color = "var(--river)",
+  height = 40,
+  strokeWidth = 1.5,
+}: {
+  values: number[];
+  color?: string;
+  height?: number;
+  strokeWidth?: number;
+}) {
+  const reduce = useReducedMotion();
+  if (values.length < 2) return null;
+
+  const max = Math.max(...values, 0);
+  const min = Math.min(...values, 0);
+  const range = max - min || 1;
+  const w = 100;
+  const pad = 2;
+
+  const points = values.map((v, i) => ({
+    x: pad + (i / (values.length - 1)) * (w - pad * 2),
+    y: height - pad - ((v - min) / range) * (height - pad * 2),
+  }));
+
+  const d = points
+    .map((p, i) => {
+      if (i === 0) return `M ${p.x} ${p.y}`;
+      const prev = points[i - 1];
+      const cpx1 = prev.x + (p.x - prev.x) / 3;
+      const cpx2 = prev.x + (2 * (p.x - prev.x)) / 3;
+      return `C ${cpx1} ${prev.y}, ${cpx2} ${p.y}, ${p.x} ${p.y}`;
+    })
+    .join(" ");
+
+  const areaD = `${d} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
+
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${height}`}
+      preserveAspectRatio="none"
+      className="mt-auto w-full"
+      style={{ height }}
+    >
+      <defs>
+        <linearGradient id="sparkline-fill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.12} />
+          <stop offset="100%" stopColor={color} stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <motion.path
+        d={areaD}
+        fill="url(#sparkline-fill)"
+        initial={reduce ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+      />
+      <motion.path
+        d={d}
+        fill="none"
+        stroke={color}
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={reduce ? false : { pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+      />
+    </svg>
+  );
+}
+
 /* ---------- big-number insight tile ---------- */
 
 /** Oversized metric card in the "performance" style — big value, quiet caption. */

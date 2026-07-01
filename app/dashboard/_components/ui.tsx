@@ -61,15 +61,17 @@ export function StatTile({
   value,
   hint,
   featured = false,
+  sparkline,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
   featured?: boolean;
+  sparkline?: ReactNode;
 }) {
   return (
     <Card
-      className={`grid h-full min-h-[104px] grid-rows-[1.65rem_1fr_1.75rem] p-3.5 ${featured ? "text-white" : ""}`}
+      className={`grid h-full min-h-[104px] grid-rows-[1.65rem_1fr_auto] p-3.5 ${featured ? "text-white" : ""}`}
       style={featured ? { background: "var(--tile-featured)", borderColor: "transparent" } : undefined}
     >
       <div
@@ -80,7 +82,10 @@ export function StatTile({
         {label}
       </div>
       <div className="flex items-center text-[1.45rem] font-semibold leading-none tracking-[-0.025em] tabular-nums">{value}</div>
-      {hint ? <div className="mt-1 text-xs">{hint}</div> : <div aria-hidden="true" />}
+      <div className="mt-1">
+        {hint && <div className="text-xs">{hint}</div>}
+        {sparkline && <div className="mt-1">{sparkline}</div>}
+      </div>
     </Card>
   );
 }
@@ -138,8 +143,8 @@ export function DashboardPageSkeleton() {
         </div>
         <Skeleton className="h-8 w-28" rounded="rounded-lg" />
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {Array.from({ length: 3 }).map((_, index) => (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
           <Card key={index} className="grid min-h-[104px] content-between gap-5 p-4">
             <Skeleton className="h-3.5 w-20" />
             <Skeleton className="h-7 w-28" />
