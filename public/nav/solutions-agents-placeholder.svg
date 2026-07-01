@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" fill="none">
+  <rect width="800" height="480" fill="#c8ced8"/>
+  <rect x="0" y="0" width="800" height="480" fill="url(#agents-bg)"/>
+  <circle cx="400" cy="210" r="88" stroke="#6d7788" stroke-width="3" opacity="0.5"/>
+  <circle cx="400" cy="210" r="28" fill="#8a94a4" opacity="0.45"/>
+  <path d="M400 122v-36M400 334v36M312 210h-36M524 210h36M338 148l-25-25M462 148l25-25M338 272l-25 25M462 272l25 25" stroke="#6d7788" stroke-width="3" stroke-linecap="round" opacity="0.45"/>
+  <rect x="120" y="360" width="560" height="56" rx="8" fill="#9aa3b2" opacity="0.28"/>
+  <rect x="148" y="378" width="120" height="8" rx="2" fill="#6d7788" opacity="0.35"/>
+  <rect x="148" y="394" width="220" height="8" rx="2" fill="#6d7788" opacity="0.22"/>
+  <defs>
+    <linearGradient id="agents-bg" x1="0" y1="0" x2="800" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#dde2ea"/>
+      <stop offset="0.5" stop-color="#ccd3de"/>
+      <stop offset="1" stop-color="#b8c0cc"/>
+    </linearGradient>
+  </defs>
+</svg>

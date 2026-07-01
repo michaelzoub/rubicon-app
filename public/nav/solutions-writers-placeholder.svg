@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 480" fill="none">
+  <rect width="800" height="480" fill="#d4ccc0"/>
+  <rect x="0" y="0" width="800" height="480" fill="url(#writers-bg)"/>
+  <path d="M120 360h180l40-120 60 180 50-150 80 90H680" stroke="#8a7f72" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+  <rect x="96" y="88" width="220" height="14" rx="2" fill="#9a8f82" opacity="0.45"/>
+  <rect x="96" y="118" width="280" height="10" rx="2" fill="#9a8f82" opacity="0.32"/>
+  <rect x="96" y="142" width="240" height="10" rx="2" fill="#9a8f82" opacity="0.32"/>
+  <rect x="96" y="166" width="200" height="10" rx="2" fill="#9a8f82" opacity="0.24"/>
+  <circle cx="620" cy="140" r="72" fill="#b8aea2" opacity="0.35"/>
+  <defs>
+    <linearGradient id="writers-bg" x1="0" y1="0" x2="800" y2="480" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#e8e2d8"/>
+      <stop offset="0.55" stop-color="#d8d0c4"/>
+      <stop offset="1" stop-color="#c9bfb2"/>
+    </linearGradient>
+  </defs>
+</svg>

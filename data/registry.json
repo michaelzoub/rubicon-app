@@ -1,0 +1,41 @@
+{
+  "providers": [
+    {
+      "id": "caliga-compute",
+      "name": "Caliga Compute",
+      "description": "Reference provider wrapping an image generation worker behind the Rubicon Provider SDK.",
+      "website": "https://caliga.dev",
+      "status": "active",
+      "routing": {
+        "baseUrl": "https://provider.example.internal",
+        "servicePath": "/rubicon/gpu-image-generation",
+        "authSecretRef": "CALIGA_COMPUTE_PROVIDER_TOKEN"
+      }
+    }
+  ],
+  "services": [
+    {
+      "id": "gpu-image-generation",
+      "providerId": "caliga-compute",
+      "name": "GPU Image Generation",
+      "description": "Generate images from prompts with streamed progress, usage, output, and final receipt events.",
+      "capabilities": ["image-generation", "streaming-output", "progress-events", "budget-enforced"],
+      "pricing": {
+        "currency": "USD",
+        "pricePerUnit": "0.001",
+        "gatewayFeePercent": "0.01"
+      },
+      "meteringUnit": "gpu_second",
+      "status": "active",
+      "input": {
+        "contentTypes": ["application/json"],
+        "schemaSummary": "Prompt, optional dimensions, optional quality target, and agent maximum spend.",
+        "required": ["prompt", "maxSpend"]
+      },
+      "output": {
+        "contentTypes": ["application/json", "image/png"],
+        "streamEvents": ["quote", "progress", "usage", "output", "receipt", "completion", "error"]
+      }
+    }
+  ]
+}
