@@ -4764,6 +4764,9 @@ a {
   height: 2.25rem;
   border-radius: 8px;
   color: #333333;
+  transition:
+    background-color 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
 }
 
 .substack-compose-back:hover {
@@ -4805,6 +4808,15 @@ a {
   border-radius: 8px;
   padding: 0 1.35rem;
   font-weight: 750;
+  transition:
+    background-color 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+.substack-compose-back:active,
+.substack-compose-preview:active,
+.substack-compose-continue:active {
+  transform: scale(0.97);
 }
 
 .substack-compose-preview {
@@ -4813,17 +4825,28 @@ a {
 }
 
 .substack-compose-continue {
-  background: var(--river);
+  background: #18181b;
   color: #ffffff;
 }
 
 .substack-compose-continue:hover {
-  background: var(--river-deep);
+  background: #2a2a2e;
 }
 
-.substack-compose-continue:disabled,
 .substack-compose-preview:disabled {
+  cursor: not-allowed;
   opacity: 0.55;
+}
+
+.substack-compose-continue:disabled {
+  cursor: not-allowed;
+  background: #18181b;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.substack-compose-preview:disabled:active,
+.substack-compose-continue:disabled:active {
+  transform: none;
 }
 
 .substack-compose-main {
@@ -4844,6 +4867,30 @@ a {
   overflow: hidden;
   overflow-wrap: break-word;
   word-break: break-word;
+  border-radius: 0;
+  box-shadow: none;
+  appearance: none;
+}
+
+.dashboard-theme .substack-title-input,
+.dashboard-theme .substack-subtitle-input,
+.dashboard-theme .substack-title-input:focus,
+.dashboard-theme .substack-subtitle-input:focus {
+  border: 0;
+  background: transparent;
+  outline: 0;
+  box-shadow: none !important;
+}
+
+.dashboard-theme .substack-username-input,
+.dashboard-theme .substack-username-input:hover,
+.dashboard-theme .substack-username-input:focus,
+.dashboard-theme .substack-username-input:focus-visible {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  outline: 0;
+  box-shadow: none !important;
 }
 
 .substack-title-input {
@@ -4899,9 +4946,24 @@ a {
 }
 
 .substack-manual-editor {
+  margin-top: 1.75rem;
+}
+
+.substack-compose-divider {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 0.85rem;
   margin-top: 2rem;
-  padding-top: 1.35rem;
-  border-top: 1px solid #eeeeef;
+  color: #999999;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.substack-compose-divider > span:first-child,
+.substack-compose-divider > span:last-child {
+  height: 1px;
+  background: #eeeeef;
 }
 
 .substack-manual-editor-label {
@@ -4913,6 +4975,10 @@ a {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.substack-compose-meta {
+  margin-top: 1.75rem;
 }
 
 .substack-editor {
@@ -5111,6 +5177,33 @@ a {
 
 .md-canvas .ProseMirror-focused {
   outline: none;
+}
+
+@media (max-width: 640px) {
+  .substack-compose-topbar {
+    gap: 0.65rem;
+    min-height: 4rem;
+    padding-inline: 0.75rem;
+  }
+
+  .substack-compose-status {
+    padding-inline: 0.5rem;
+  }
+
+  .substack-compose-preview,
+  .substack-compose-continue {
+    min-height: 2.5rem;
+    padding-inline: 0.85rem;
+    font-size: 0.86rem;
+  }
+
+  .substack-compose-main {
+    padding: 2.25rem 1rem 4rem;
+  }
+
+  .substack-toolbar-note {
+    display: none;
+  }
 }
 
 /* 2026 light workspace redesign ------------------------------------------------ */
@@ -5847,4 +5940,55 @@ a {
 
 @media (prefers-reduced-motion: reduce) {
   .rubicon-skeleton { animation: none; background: var(--surface-muted); }
+}
+
+/* Onboarding price slider (Substack step 3): quiet track, near-black thumb.
+   The filled portion of the track is painted inline as a gradient. */
+.dashboard-theme input[type="range"].substack-price-slider {
+  height: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #e4e4e7;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.substack-price-slider::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #18181b;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.substack-price-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: #18181b;
+}
+
+/* The slider's editable twin: a number input styled as the plain-text price
+   readout it replaces, so agents can type a price instead of dragging. */
+.dashboard-theme input[type="number"].substack-price-input {
+  width: 6.5ch;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.substack-price-input::-webkit-inner-spin-button,
+.substack-price-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }

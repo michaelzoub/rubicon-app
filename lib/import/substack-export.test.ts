@@ -55,4 +55,17 @@ describe("Substack export parser", () => {
 
     expect(result.every((candidate) => !candidate.importable)).toBe(true);
   });
+
+  it("reports the number of drafts when an export has no published posts", () => {
+    const csv = [
+      "post_id,is_published,title",
+      "401,false,First draft",
+      "402,FALSE,Second draft",
+    ].join("\n");
+
+    expect(() => parseSubstackExport([
+      { path: "posts.csv", content: Buffer.from(csv) },
+      { path: "posts/401.first-draft.html", content: Buffer.from("<p>Private draft</p>") },
+    ])).toThrow("This export contains 2 drafts and no published posts");
+  });
 });

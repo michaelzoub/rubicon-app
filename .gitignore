@@ -13,3 +13,8 @@ pnpm-debug.log*
 
 # Throwaway dashboard flow/hints preview (local only)
 app/dashboard/flow/
+
+# Playwright artifacts and recorded auth sessions
+test-results/
+playwright-report/
+e2e/.auth/

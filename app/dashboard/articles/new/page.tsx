@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowLeft,
   ArrowRight,
@@ -432,35 +433,17 @@ function StepAddArticle({
           </div>
         )}
 
-        <div className="substack-compose-meta">
-          <textarea
-            ref={titleRef}
-            value={title}
-            onChange={(e) => onTitle(e.target.value)}
-            placeholder="Title"
-            rows={1}
-            maxLength={120}
-            className="substack-title-input"
-          />
-          <input
-            value={author}
-            onChange={(e) => onAuthor(e.target.value)}
-            placeholder="Add author..."
-            className="substack-subtitle-input"
-          />
-        </div>
-
-        <section className="mb-7 grid gap-3" aria-label="Import article">
-          <div>
-            <span className="text-sm font-semibold">Bring in an existing article</span>
-            <p className="mt-1 text-sm text-[var(--muted)]">Import from URL, upload Markdown, or use the Chrome extension. Writing manually is below if nothing else works.</p>
-          </div>
+        <section className="grid gap-3" aria-label="Import article">
+          <span className="text-sm font-semibold">Import an existing article</span>
           <div className="flex flex-wrap gap-2">
             {!source && (
               <Link href="/dashboard/articles/import" className="button button-primary text-sm">
                 <Link2 size={15} aria-hidden="true" /> Import URL
               </Link>
             )}
+            <Link href="/dashboard/import/substack" className="button button-secondary text-sm">
+              <Image src="/substacklogo.png" alt="" width={15} height={15} aria-hidden="true" /> Import from Substack
+            </Link>
             <button type="button" onClick={() => fileRef.current?.click()} className="button button-secondary text-sm">
               <FileText size={15} aria-hidden="true" /> Import Markdown
             </button>
@@ -476,17 +459,41 @@ function StepAddArticle({
         </section>
 
         <input ref={fileRef} type="file" accept=".md,.markdown,.txt" onChange={onUpload} className="hidden" />
-        <div className="substack-manual-editor">
+
+        <div className="substack-compose-divider" aria-hidden="true">
+          <span />
+          <span>or</span>
+          <span />
+        </div>
+
+        <section className="substack-manual-editor" aria-labelledby="manual-writing-title">
           <div className="substack-manual-editor-label">
             <PenLine size={15} aria-hidden="true" />
-            <span>Write manually</span>
+            <span id="manual-writing-title">Write manually</span>
           </div>
-        <MarkdownEditor
-          value={content}
-          onChange={onContent}
-          placeholder="Start writing..."
-        />
-        </div>
+          <div className="substack-compose-meta">
+            <textarea
+              ref={titleRef}
+              value={title}
+              onChange={(e) => onTitle(e.target.value)}
+              placeholder="Title"
+              rows={1}
+              maxLength={120}
+              className="substack-title-input"
+            />
+            <input
+              value={author}
+              onChange={(e) => onAuthor(e.target.value)}
+              placeholder="Add author..."
+              className="substack-subtitle-input"
+            />
+          </div>
+          <MarkdownEditor
+            value={content}
+            onChange={onContent}
+            placeholder="Start writing..."
+          />
+        </section>
       </main>
     </div>
   );

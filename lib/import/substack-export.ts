@@ -79,6 +79,13 @@ export function parseSubstackExport(files: ExportFile[]): SubstackCandidate[] {
   const htmlFiles = normalized.filter((file) => /\.html?$/i.test(file.path));
   const publishedRows = parsed.data.filter((row) => String(row.is_published ?? "").toLowerCase() === "true");
 
+  if (publishedRows.length === 0 && parsed.data.length > 0) {
+    const draftCount = parsed.data.length;
+    throw new Error(
+      `This export contains ${draftCount} ${draftCount === 1 ? "draft" : "drafts"} and no published posts. Publish the posts you want to import on Substack, then request a new export.`,
+    );
+  }
+
   return publishedRows.map((row) => buildCandidate(row, findPostHtml(row, htmlFiles, publishedRows)));
 }
 

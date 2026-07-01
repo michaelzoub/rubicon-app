@@ -108,6 +108,9 @@ export default function ArticlesPage() {
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   <Link
                     href={`/dashboard/articles/${article.id}`}
+                    // Post-go-live landing page: agents finishing onboarding
+                    // read the live article's URL from this link.
+                    {...(article.state === "live" ? { "data-testid": "live-url" } : {})}
                     className="min-w-0 break-words text-lg font-semibold [overflow-wrap:anywhere] hover:underline"
                   >
                     {article.title}

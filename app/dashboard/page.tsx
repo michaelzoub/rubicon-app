@@ -2,18 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Activity,
-  AlertTriangle,
   ArrowRight,
+  Bot,
   Check,
+  Coins,
   Copy,
   Download,
   ExternalLink,
   FileText,
-  Link2,
-  RefreshCw,
+  Wallet,
   X,
 } from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
@@ -234,9 +234,17 @@ export default function OverviewPage() {
                 articles={forceNewUser ? [] : articles.data ?? []}
                 walletConnected={forceNewUser ? false : walletConnected}
               />
-              <OnchainCard address={forceNewUser ? null : wallet.data?.address ?? null} />
-              <PaymentActivityCard activity={forceNewUser ? { status: "success", data: [], error: null, refetch: () => {} } : activity} />
-              <ArticlesCard articles={forceNewUser ? [] : articles.data ?? []} hasArticles={forceNewUser ? false : hasArticles} />
+              <LaunchMonitorCard
+                articles={forceNewUser ? [] : articles.data ?? []}
+                walletAddress={forceNewUser ? null : wallet.data?.address ?? null}
+                activity={forceNewUser ? [] : activity.data ?? []}
+              />
+              {forceNewUser || (activity.status === "success" && (activity.data?.length ?? 0) === 0) ? (
+                <FirstReadPreviewCard articles={forceNewUser ? [] : articles.data ?? []} />
+              ) : (
+                <PaymentActivityCard activity={activity} />
+              )}
+              {!forceNewUser && hasArticles && <ArticlesCard articles={articles.data ?? []} hasArticles={hasArticles} />}
             </>
           )}
 
@@ -887,116 +895,258 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
-function OnchainCard({ address }: { address: string | null }) {
-  const balance = useNativeBalance(address);
-  const [copied, setCopied] = useState(false);
-  const [withdrawOpen, setWithdrawOpen] = useState(false);
+/* ---------- launch monitor (pre-onboarding state board) ---------- */
 
-  const copy = async () => {
-    if (!address) return;
-    await navigator.clipboard.writeText(address);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1400);
-  };
+type IndicatorTone = "go" | "wait" | "off";
+
+/** Traffic-light dot: solid green (go), pulsing amber (needs attention), hollow (not started). */
+function StatusDot({ tone }: { tone: IndicatorTone }) {
+  if (tone === "go") return <span className="inline-flex size-2 shrink-0 rounded-full bg-[var(--green)]" aria-hidden="true" />;
+  if (tone === "wait") {
+    return (
+      <span className="relative inline-flex size-2 shrink-0" aria-hidden="true">
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#c98a2b] opacity-70 motion-reduce:animate-none" />
+        <span className="relative inline-flex size-2 rounded-full bg-[#c98a2b]" />
+      </span>
+    );
+  }
+  return <span className="inline-flex size-2 shrink-0 rounded-full border border-[var(--quiet)]" aria-hidden="true" />;
+}
+
+function IndicatorTile({
+  tone,
+  label,
+  value,
+  caption,
+}: {
+  tone: IndicatorTone;
+  label: string;
+  value: ReactNode;
+  caption: ReactNode;
+}) {
+  return (
+    <div className={`rounded-lg border p-4 ${tone === "wait" ? "border-[#eddcbd] bg-[#fdf9f1]" : "border-[var(--line)] bg-[var(--surface-muted)]"}`}>
+      <div className="flex items-center gap-2">
+        <StatusDot tone={tone} />
+        <span className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">{label}</span>
+      </div>
+      <div className="mt-2.5 text-xl font-semibold tabular-nums tracking-[-0.01em]">{value}</div>
+      <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{caption}</div>
+    </div>
+  );
+}
+
+/**
+ * The state board under the setup checklist: the checklist lists what to *do*,
+ * this shows what is currently *true* — catalog size, price, payout readiness,
+ * and what the catalog is worth to agents — with one live "listening" strip.
+ */
+function LaunchMonitorCard({
+  articles,
+  walletAddress,
+  activity,
+}: {
+  articles: Article[];
+  walletAddress: string | null;
+  activity: PaymentActivity[];
+}) {
+  const liveArticles = articles.filter((a) => a.state === "live");
+  const priced = articles.filter((a) => Number(a.pricePerWordAtomic) > 0);
+  const listedWords = liveArticles.reduce((sum, a) => sum + a.totalWords, 0);
+  const pricedWords = priced.reduce((sum, a) => sum + a.totalWords, 0);
+  const avgPrice = pricedWords > 0 ? priced.reduce((sum, a) => sum + atomicToUsd(a.pricePerWordAtomic) * a.totalWords, 0) / pricedWords : 0;
+  /** What one full read-through of every priced article would pay. */
+  const shelfValue = priced.reduce((sum, a) => sum + atomicToUsd(a.pricePerWordAtomic) * a.totalWords, 0);
+  const avgArticleWords = priced.length > 0 ? Math.round(pricedWords / priced.length) : 0;
+  const recentReads = activity.filter(
+    (row) => row.status !== "failed" && Date.now() - new Date(row.date).getTime() < 48 * 3_600_000,
+  ).length;
+
+  const systems: IndicatorTone[] = [
+    liveArticles.length > 0 ? "go" : articles.length > 0 ? "wait" : "off",
+    priced.length > 0 ? "go" : articles.length > 0 ? "wait" : "off",
+    walletAddress ? "go" : articles.length > 0 ? "wait" : "off",
+  ];
+  const readyCount = systems.filter((tone) => tone === "go").length;
 
   return (
     <Card>
-      {address && (
-        <WithdrawDialog open={withdrawOpen} onClose={() => setWithdrawOpen(false)} walletAddress={address} />
-      )}
       <CardHeader
-        title="Payout connection"
+        title="Launch monitor"
         action={
-          address ? (
-            <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => setWithdrawOpen(true)}
-                className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--river-deep)] hover:underline"
-              >
-                <ArrowRight size={14} aria-hidden="true" /> Withdraw
-              </button>
-              <button
-                type="button"
-                onClick={() => balance.refetch()}
-                className="inline-flex items-center gap-1.5 text-sm text-[var(--river-deep)] hover:underline"
-              >
-                <RefreshCw size={14} aria-hidden="true" /> Refresh
-              </button>
-            </div>
-          ) : undefined
+          <span className="mono text-xs tabular-nums text-[var(--muted)]">
+            {readyCount} / {systems.length} ready
+          </span>
         }
       />
-      {!address ? (
-        <div className="p-4 sm:p-5">
-          <div role="alert" className="flex flex-col gap-3 rounded-[10px] border border-[#f0ddbf] bg-[#fdf6ec] px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-start gap-3">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#f6e6cf] text-[#9a6516]">
-                <AlertTriangle size={18} aria-hidden="true" />
-              </span>
-              <div>
-                <div className="text-sm font-semibold text-[#7b4e12]">You can’t receive payments yet</div>
-                <p className="mt-1 text-sm leading-6 text-[#8a6326]">Confirm the secure Privy connection Rubicon uses for payouts to start earning from agent reads.</p>
-              </div>
-            </div>
-            <Link href="/dashboard/settings" className="button button-primary shrink-0 self-start text-sm sm:self-center">
-              Confirm connection <ArrowRight size={14} aria-hidden="true" />
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div className="grid gap-3 px-3 pb-3">
-          <p className="px-2 text-xs text-[var(--muted)]">Withdrawable earnings are sent through your confirmed payout connection.</p>
-          <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-          {/* Wallet address */}
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] p-5">
-            <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Wallet address</div>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="mono text-sm font-medium">{shortWallet(address)}</span>
-              <button type="button" onClick={copy} className="text-[var(--muted)] transition-colors hover:text-[var(--ink)]" aria-label="Copy address">
-                <Copy size={14} aria-hidden="true" />
-              </button>
-              {copied && <span className="text-xs text-[var(--green)]">copied</span>}
-            </div>
-            <a
-              href={explorerAddressUrl(address)}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--river-deep)] hover:underline"
-            >
-              View on {ACTIVE_CHAIN.blockExplorers?.default.name ?? "explorer"} <ExternalLink size={11} aria-hidden="true" />
-            </a>
-          </div>
-
-          {/* Network */}
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] p-5">
-            <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Network</div>
-            <div className="mt-2 flex items-center gap-2 text-sm font-medium">
-              <Link2 size={15} className="text-[var(--river)]" aria-hidden="true" /> {ACTIVE_CHAIN.name}
-            </div>
-            <div className="mt-2 text-xs text-[var(--muted)]">Chain ID {ACTIVE_CHAIN.id}</div>
-          </div>
-
-          {/* Balance */}
-          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] p-5">
-            <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Balance</div>
-            <div className="mt-2 text-2xl font-semibold tracking-[-0.01em]">
-              {balance.status === "loading" ? (
-                <span className="text-base font-normal text-[var(--muted)]">Loading…</span>
-              ) : balance.status === "error" ? (
-                <span className="text-base font-normal text-[#8d2f2d]">Unavailable</span>
+      <div className="grid gap-3 p-4 sm:p-5">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <IndicatorTile
+            tone={systems[0]}
+            label="Catalog"
+            value={
+              liveArticles.length > 0 ? (
+                <><CountUp value={liveArticles.length} format={formatInt} /> live</>
+              ) : articles.length > 0 ? (
+                <><CountUp value={articles.length} format={formatInt} /> imported</>
               ) : (
-                <>
-                  {formatBalance(balance.value)}
-                  <span className="ml-1.5 text-sm font-medium text-[var(--muted)]">{balance.symbol}</span>
-                </>
-              )}
-            </div>
-            {balance.status === "error" && <div className="mt-1 text-xs text-[var(--muted)]">Could not reach the RPC. Try Refresh.</div>}
-          </div>
-          </div>
+                "0 articles"
+              )
+            }
+            caption={
+              listedWords > 0
+                ? `${formatInt(listedWords)} words listed for agents`
+                : articles.length > 0
+                  ? "Publish to list them for agents"
+                  : "Import your archive or add one article"
+            }
+          />
+          <IndicatorTile
+            tone={systems[1]}
+            label="Price per word"
+            value={priced.length > 0 ? `$${avgPrice.toFixed(4)}` : "Not set"}
+            caption={
+              priced.length > 0 && avgArticleWords > 0
+                ? `An average piece (${formatInt(avgArticleWords)} words) pays ${formatUsdNumber(avgPrice * avgArticleWords)}`
+                : "The rate agents pay for delivered words"
+            }
+          />
+          <IndicatorTile
+            tone={systems[2]}
+            label="Payouts"
+            value={walletAddress ? <span className="mono text-base">{shortWallet(walletAddress)}</span> : "Not connected"}
+            caption={
+              walletAddress ? (
+                <a
+                  href={explorerAddressUrl(walletAddress)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[var(--river-deep)] hover:underline"
+                >
+                  View on {ACTIVE_CHAIN.blockExplorers?.default.name ?? "explorer"} <ExternalLink size={11} aria-hidden="true" />
+                </a>
+              ) : (
+                <Link href="/dashboard/settings" className="inline-flex items-center gap-1 font-medium text-[var(--river-deep)] hover:underline">
+                  Confirm connection <ArrowRight size={12} aria-hidden="true" />
+                </Link>
+              )
+            }
+          />
+          <IndicatorTile
+            tone={shelfValue > 0 ? "go" : "off"}
+            label="Shelf value"
+            value={<CountUp value={shelfValue} format={formatUsdNumber} />}
+            caption="One full read-through of everything you've priced"
+          />
         </div>
-      )}
+
+        <div className="flex flex-col gap-3 rounded-lg border border-[var(--line)] px-4 py-3.5 sm:flex-row sm:items-center">
+          <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-[#edf8f2]" aria-hidden="true">
+            <span className="absolute inline-flex size-3 animate-ping rounded-full bg-[var(--green)] opacity-50 motion-reduce:animate-none" />
+            <span className="relative inline-flex size-2 rounded-full bg-[var(--green)]" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-medium">Listening for agent traffic</div>
+            <p className="mt-0.5 text-xs leading-5 text-[var(--muted)]">
+              {readyCount === systems.length
+                ? "Payments appear here seconds after an agent pays for a passage."
+                : "Agents can start paying the moment every indicator above is green."}
+            </p>
+          </div>
+          <span className="mono shrink-0 text-xs tabular-nums text-[var(--muted)]">{formatInt(recentReads)} reads · 48h</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * Pre-revenue stand-in for the payment feed: the payment lifecycle in three
+ * beats, then example rows priced from the writer's own catalog so the first
+ * real row looks familiar when it lands.
+ */
+function FirstReadPreviewCard({ articles }: { articles: Article[] }) {
+  const priced = articles.filter((a) => Number(a.pricePerWordAtomic) > 0 && a.totalWords > 0);
+  const pool = priced.length > 0 ? priced : articles.filter((a) => a.totalWords > 0);
+  const examples = pool.slice(0, 2).map((a) => ({
+    title: a.title,
+    words: a.totalWords,
+    amount:
+      Number(a.pricePerWordAtomic) > 0
+        ? atomicToUsd(a.pricePerWordAtomic) * a.totalWords
+        : a.totalWords * 0.001,
+  }));
+  if (examples.length === 0) {
+    examples.push({ title: "Your first article", words: 1_200, amount: 1.2 });
+  }
+
+  const beats = [
+    { icon: Bot, title: "An agent finds a passage", detail: "Your sections are indexed for agent search." },
+    { icon: Coins, title: "It pays per word delivered", detail: "Settled over x402 at your price, per request." },
+    { icon: Wallet, title: "Earnings land in your wallet", detail: "Withdrawable through your payout connection." },
+  ];
+
+  return (
+    <Card>
+      <CardHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            Agent activity
+            <LiveDot />
+          </span>
+        }
+        action={<span className="text-xs text-[var(--muted)]">Listening</span>}
+      />
+      <div className="grid gap-4 p-4 sm:p-5">
+        <ol className="grid gap-2 sm:grid-cols-3">
+          {beats.map((beat, index) => (
+            <li key={beat.title} className="relative rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] p-4">
+              <div className="flex items-center justify-between">
+                <span className="grid size-8 place-items-center rounded-lg bg-white text-[var(--river-deep)]">
+                  <beat.icon size={16} aria-hidden="true" />
+                </span>
+                <span className="mono text-[0.66rem] text-[var(--quiet)]">{index + 1} / {beats.length}</span>
+              </div>
+              <div className="mt-3 text-sm font-medium">{beat.title}</div>
+              <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{beat.detail}</div>
+              {index < beats.length - 1 && (
+                <ArrowRight
+                  size={13}
+                  className="absolute -right-[11px] top-1/2 z-10 hidden -translate-y-1/2 text-[var(--quiet)] sm:block"
+                  aria-hidden="true"
+                />
+              )}
+            </li>
+          ))}
+        </ol>
+
+        <div>
+          <ul className="grid gap-1.5">
+            {examples.map((example) => (
+              <li
+                key={example.title}
+                className="flex items-center justify-between gap-4 rounded-lg border border-dashed border-[var(--line)] px-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-[var(--muted)]">{example.title}</div>
+                  <div className="text-xs text-[var(--quiet)]">Soon · {formatInt(example.words)} words read</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="font-semibold tabular-nums text-[var(--muted)]">{formatUsdNumber(example.amount)}</span>
+                  <span className="mono rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.08em] text-[var(--muted)]">
+                    Example
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 px-1 text-xs text-[var(--muted)]">
+            {priced.length > 0
+              ? "Examples use your real titles and prices — a full read of each piece. No payments yet."
+              : "Illustrative at $0.001 per word. No payments yet."}
+          </p>
+        </div>
+      </div>
     </Card>
   );
 }
