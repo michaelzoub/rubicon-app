@@ -64,9 +64,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!authenticated) { /* E2E-TEMP-BYPASS */
-    // return <WriterAuthScreen onLogin={login} />;
-  }
+  if (!authenticated) return <WriterAuthScreen onLogin={login} />;
 
   return <Layout>{children}</Layout>;
 }
