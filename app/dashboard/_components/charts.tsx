@@ -12,7 +12,7 @@
  */
 
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 
 /* ---------- animated number ---------- */
 
@@ -164,8 +164,8 @@ export interface DonutSlice {
   color: string;
 }
 
-/** Single-hue accent-blue ramp, deep → pale, matching the overview reference. */
-export const DONUT_COLORS = ["#2f7df4", "#6da8f7", "#b7d4fb", "#d4e5fd", "#e6f0fe"];
+/** Monochrome ink ramp, deep → pale: rank reads by lightness, the legend carries identity. */
+export const DONUT_COLORS = ["#18181b", "#47474d", "#75757c", "#a3a3ab", "#d2d2d7"];
 
 /**
  * Ring chart with a centered headline. Slices sweep in clockwise on mount and
@@ -203,7 +203,9 @@ export function Donut({
           {total > 0 &&
             slices.map((slice, i) => {
               const fraction = slice.value / total;
-              const dash = Math.max(fraction * circumference, 0.0001);
+              // 2px of surface between adjacent slices keeps the lightness ramp readable.
+              const slicePad = slices.length > 1 ? 2 : 0;
+              const dash = Math.max(fraction * circumference - slicePad, 0.0001);
               const gap = circumference - dash;
               const dashOffset = -offsetAcc * circumference;
               offsetAcc += fraction;
@@ -246,7 +248,7 @@ export function Donut({
           return (
             <li
               key={i}
-              className={`flex items-center gap-2.5 rounded-md px-2 py-1 transition-colors ${active === i ? "bg-[var(--river-pale)]" : ""}`}
+              className={`flex items-center gap-2.5 rounded-md px-2 py-1 transition-colors ${active === i ? "bg-[var(--surface-muted)]" : ""}`}
               onMouseEnter={() => setActive(i)}
               onMouseLeave={() => setActive((cur) => (cur === i ? null : cur))}
             >
@@ -270,7 +272,7 @@ export function Donut({
  */
 export function Sparkline({
   values,
-  color = "var(--river)",
+  color = "var(--ink)",
   height = 40,
   strokeWidth = 1.5,
 }: {
@@ -280,6 +282,7 @@ export function Sparkline({
   strokeWidth?: number;
 }) {
   const reduce = useReducedMotion();
+  const gradientId = useId();
   if (values.length < 2) return null;
 
   const max = Math.max(...values, 0);
@@ -305,22 +308,24 @@ export function Sparkline({
 
   const areaD = `${d} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
 
+  const last = points[points.length - 1];
+
   return (
-    <svg
-      viewBox={`0 0 ${w} ${height}`}
-      preserveAspectRatio="none"
-      className="mt-auto w-full"
-      style={{ height }}
-    >
-      <defs>
-        <linearGradient id="sparkline-fill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.12} />
+    <div className="relative mt-auto w-full" style={{ height }}>
+      <svg
+        viewBox={`0 0 ${w} ${height}`}
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full"
+      >
+        <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.08} />
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
       <motion.path
         d={areaD}
-        fill="url(#sparkline-fill)"
+        fill={`url(#${gradientId})`}
         initial={reduce ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
@@ -336,7 +341,18 @@ export function Sparkline({
         animate={{ pathLength: 1 }}
         transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
       />
-    </svg>
+      </svg>
+      {/* "Now" marker: HTML overlay (not in-SVG) so preserveAspectRatio="none"
+          can't stretch it. Ringed in surface so it reads over the fill. */}
+      <motion.span
+        aria-hidden="true"
+        className="absolute h-[5px] w-[5px] -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-[var(--card,#fff)]"
+        style={{ left: `${(last.x / w) * 100}%`, top: `${(last.y / height) * 100}%`, background: color }}
+        initial={reduce ? false : { opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3, delay: reduce ? 0 : 0.35, ease: [0.23, 1, 0.32, 1] }}
+      />
+    </div>
   );
 }
 

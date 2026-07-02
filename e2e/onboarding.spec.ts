@@ -119,12 +119,21 @@ test.describe("Substack onboarding (agent-readable UI)", () => {
     await mockBackend(page, articles);
     await page.goto("/dashboard");
 
-    // Step 1 — connect. The welcome splash auto-advances into it.
+    // Step 1 — where do you mostly write. The welcome splash auto-advances into it.
     const container = page.locator("[data-onboarding-step]");
-    await expect(container).toHaveAttribute("data-onboarding-step", "connect", { timeout: 30_000 });
-    await expect(page.getByRole("heading", { name: "Connect your Substack" })).toBeVisible();
-    await expect(page.getByText("Step 1 of 3")).toBeVisible();
+    await expect(container).toHaveAttribute("data-onboarding-step", "platform", { timeout: 30_000 });
+    await expect(page.getByRole("heading", { name: "Where do you mostly write?" })).toBeVisible();
+    await expect(page.getByText("Step 1 of 4")).toBeVisible();
+    await expect(page.getByTestId("platform-continue-button")).toBeDisabled();
+    await page.getByTestId("platform-substack").click();
+    await expect(page.getByTestId("platform-substack")).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByTestId("platform-other")).toHaveAttribute("aria-checked", "false");
+    await page.getByTestId("platform-continue-button").click();
 
+    // Step 2 — connect.
+    await expect(container).toHaveAttribute("data-onboarding-step", "connect");
+    await expect(page.getByRole("heading", { name: "Connect your Substack" })).toBeVisible();
+    await expect(page.getByText("Step 2 of 4")).toBeVisible();
     const publicationInput = page.getByTestId("publication-input");
     await expect(publicationInput).toHaveAttribute("aria-describedby", "substack-lookup-feedback");
     await publicationInput.fill("wenkafka");
@@ -133,11 +142,11 @@ test.describe("Substack onboarding (agent-readable UI)", () => {
     await expect(page.getByTestId("continue-button")).toBeEnabled();
     await page.getByTestId("continue-button").click();
 
-    // Step 2 — import. Links are real hrefs; the upload goes through the
+    // Step 3 — import. Links are real hrefs; the upload goes through the
     // hidden file input, the same path drag-and-drop feeds.
     await expect(container).toHaveAttribute("data-onboarding-step", "import");
     await expect(page.getByRole("heading", { name: "Import your archive" })).toBeVisible();
-    await expect(page.getByText("Step 2 of 3")).toBeVisible();
+    await expect(page.getByText("Step 3 of 4")).toBeVisible();
     await expect(page.getByTestId("export-settings-link")).toHaveAttribute(
       "href",
       "https://wenkafka.substack.com/publish/settings#import-export-settings",
@@ -150,10 +159,10 @@ test.describe("Substack onboarding (agent-readable UI)", () => {
       buffer: Buffer.from("PK fake zip — the parse API is mocked"),
     });
 
-    // Step 3 — price. The summary is status text; the price is typed, not dragged.
+    // Step 4 — price. The summary is status text; the price is typed, not dragged.
     await expect(container).toHaveAttribute("data-onboarding-step", "price");
     await expect(page.getByRole("heading", { name: "Set your price" })).toBeVisible();
-    await expect(page.getByText("Step 3 of 3")).toBeVisible();
+    await expect(page.getByText("Step 4 of 4")).toBeVisible();
     await expect(page.getByTestId("import-summary")).toHaveText(/2 of 2 posts · 3,400 words/);
 
     await page.getByRole("button", { name: /Choose and price posts/ }).click();
@@ -189,9 +198,11 @@ test.describe("Substack onboarding (agent-readable UI)", () => {
     await mockBackend(page, articles);
     await page.goto("/dashboard");
 
-    await expect(page.locator("[data-onboarding-step]")).toHaveAttribute("data-onboarding-step", "connect", {
+    await expect(page.locator("[data-onboarding-step]")).toHaveAttribute("data-onboarding-step", "platform", {
       timeout: 30_000,
     });
+    await page.getByTestId("platform-substack").click();
+    await page.getByTestId("platform-continue-button").click();
     await page.getByTestId("publication-input").fill("wenkafka");
     await expect(page.getByTestId("continue-button")).toBeEnabled();
     await page.getByTestId("continue-button").click();

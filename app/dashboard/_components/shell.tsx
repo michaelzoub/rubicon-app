@@ -311,7 +311,7 @@ function MobileBar({ onLogout, activePath }: { onLogout?: () => void; activePath
               key={item.href}
               href={item.href}
               className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
-                active ? "bg-[var(--river-pale)] text-[var(--river-deep)]" : "text-[var(--muted)]"
+                active ? "bg-[var(--surface-muted)] text-[var(--ink)]" : "text-[var(--muted)]"
               }`}
             >
               {item.label}

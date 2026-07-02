@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, Loader2, Mail, MousePointer2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, Loader2, Mail, MousePointer2, PenLine, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { parseSubstackSubdomain } from "@/lib/import/substack-subdomain";
@@ -29,7 +29,16 @@ function snapPrice(usd: number): number {
   return Math.round(clamped / PRICE_STEP) * PRICE_STEP;
 }
 
-type Step = "welcome" | "connect" | "import" | "price" | "success";
+type Step = "welcome" | "platform" | "connect" | "import" | "price" | "success";
+
+/** Platforms offered on the "where do you mostly write" step. Only Substack
+ * has an import flow today; picking anything else exits to the dashboard. */
+const WRITING_PLATFORMS = [
+  { id: "substack", label: "Substack", logoSrc: "/substacklogo.png" },
+  { id: "other", label: "Other", logoSrc: null },
+] as const;
+
+type PlatformId = (typeof WRITING_PLATFORMS)[number]["id"];
 
 interface LookupState {
   status: "idle" | "checking" | "found" | "missing";
@@ -104,7 +113,10 @@ export function SubstackOnboardingDialog({
   });
   const [step, setStep] = useState<Step>("welcome");
 
-  // Step 1 — connect
+  // Step 1 — where do you mostly write
+  const [platform, setPlatform] = useState<PlatformId | null>(null);
+
+  // Step 2 — connect
   const [input, setInput] = useState("");
   const [lookup, setLookup] = useState<LookupState>({ status: "idle", subdomain: null });
   const [connecting, setConnecting] = useState(false);
@@ -117,13 +129,13 @@ export function SubstackOnboardingDialog({
   /** Set when a suggestion is picked so the resulting input change doesn't reopen the dropdown. */
   const skipSearchRef = useRef(false);
 
-  // Step 2 — import archive
+  // Step 3 — import archive
   const [subdomain, setSubdomain] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState<UploadState>({ phase: "idle" });
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Step 3 — price
+  // Step 4 — price
   const [archive, setArchive] = useState<ArchiveStats | null>(null);
   const [price, setPrice] = useState(PRICE_DEFAULT);
   /** Raw text in the price readout while it's being typed in; null shows the
@@ -168,9 +180,10 @@ export function SubstackOnboardingDialog({
 
   useEffect(() => {
     if (!open || step !== "welcome") return;
-    const timer = window.setTimeout(() => setStep("connect"), reduceMotion ? 500 : 2600);
+    // The demo video only shows the Substack path, so it skips the platform question.
+    const timer = window.setTimeout(() => setStep(demo ? "connect" : "platform"), reduceMotion ? 500 : 2600);
     return () => window.clearTimeout(timer);
-  }, [open, reduceMotion, step]);
+  }, [demo, open, reduceMotion, step]);
 
   // Server state is authoritative for resumption: a parsed-but-unpriced export
   // jumps straight to step 3, a connected publication to step 2. Never on
@@ -199,7 +212,7 @@ export function SubstackOnboardingDialog({
           setSelectedPostIds(body.pendingArchive.posts.map((post) => post.id));
           setStep("price");
         } else {
-          setStep((current) => (current === "welcome" || current === "connect" ? "import" : current));
+          setStep((current) => (current === "welcome" || current === "platform" || current === "connect" ? "import" : current));
         }
       } catch {
         // Resume is best-effort; the writer can always redo a step.
@@ -319,7 +332,14 @@ export function SubstackOnboardingDialog({
     setLookup({ status: "found", subdomain: suggestion.subdomain, name: suggestion.name, logoUrl: suggestion.logoUrl });
   }
 
-  /** Step 2 → 1: re-choose the publication, prefilled so lookup re-verifies. */
+  /** Step 1 → 2, or out to the dashboard for platforms we can't import yet. */
+  function continueFromPlatform() {
+    if (!platform) return;
+    if (platform === "substack") setStep("connect");
+    else close();
+  }
+
+  /** Step 3 → 2: re-choose the publication, prefilled so lookup re-verifies. */
   function backToConnect() {
     skipSearchRef.current = true;
     setInput(subdomain ?? "");
@@ -327,7 +347,7 @@ export function SubstackOnboardingDialog({
     setStep("connect");
   }
 
-  /** Step 3 → 2: swap in a different export ZIP. */
+  /** Step 4 → 3: swap in a different export ZIP. */
   function backToImport() {
     setPriceError(null);
     setUploadState({ phase: "idle" });
@@ -553,6 +573,76 @@ export function SubstackOnboardingDialog({
           </motion.section>
         )}
 
+        {step === "platform" && (
+          <motion.section
+            key="platform"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="writing-platform-title"
+            className={`${cardClass} max-w-md`}
+            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.01 : 0.35, ease: EASE_OUT }}
+          >
+            <div className="text-center">
+              <p className="text-xs font-medium text-[var(--quiet)]">Step 1 of 4</p>
+              <h1 id="writing-platform-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Where do you mostly write?</h1>
+              <p className="mt-2 text-sm text-[var(--muted)]">We’ll tailor the import to your platform.</p>
+            </div>
+
+            <div className="mt-7 grid grid-cols-2 gap-3" role="radiogroup" aria-labelledby="writing-platform-title">
+              {WRITING_PLATFORMS.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={platform === option.id}
+                  data-testid={`platform-${option.id}`}
+                  onClick={() => setPlatform(option.id)}
+                  className={`relative grid aspect-square w-full place-content-center justify-items-center gap-3 rounded-lg border-2 p-5 transition-[background-color,border-color,transform] duration-150 ease-out active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)] ${
+                    platform === option.id
+                      ? "border-[var(--ink)] bg-white"
+                      : "border-transparent bg-[var(--surface-muted)] hover:bg-[var(--hovered)]"
+                  }`}
+                >
+                  {platform === option.id && (
+                    <span className="absolute right-3 top-3 grid h-6 w-6 place-items-center rounded-full bg-[var(--ink)] text-white" aria-hidden="true">
+                      <Check size={14} strokeWidth={2.5} />
+                    </span>
+                  )}
+                  {option.logoSrc ? (
+                    <Image src={option.logoSrc} alt="" width={40} height={40} className="rounded-md" />
+                  ) : (
+                    <span className="grid h-10 w-10 place-items-center rounded-md bg-white text-[var(--muted)]" aria-hidden="true">
+                      <PenLine size={20} strokeWidth={1.75} />
+                    </span>
+                  )}
+                  <span className={`text-sm ${platform === option.id ? "font-semibold" : "font-medium"}`}>{option.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-3 min-h-10 text-sm leading-5" role="status" aria-live="polite">
+              {platform === "other" && (
+                <span className="text-[var(--muted)]">
+                  We’re starting with Substack — more platforms are coming soon. You can still explore your dashboard.
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              data-testid="platform-continue-button"
+              onClick={continueFromPlatform}
+              disabled={!platform}
+              className="button button-primary mt-5 w-full justify-center py-3 disabled:opacity-40"
+            >
+              {platform === "other" ? <>Go to my dashboard <ArrowRight size={16} /></> : <>Continue <ArrowRight size={16} /></>}
+            </button>
+          </motion.section>
+        )}
+
         {step === "connect" && (
           <motion.section
             key="connect"
@@ -565,8 +655,13 @@ export function SubstackOnboardingDialog({
             exit={{ opacity: 0 }}
             transition={{ duration: reduceMotion ? 0.01 : 0.35, ease: EASE_OUT }}
           >
+            {!demo && (
+              <button type="button" onClick={() => setStep("platform")} className="dashboard-icon-button absolute left-4 top-4" aria-label="Back to choose where you write">
+                <ArrowLeft size={15} />
+              </button>
+            )}
             <div className="text-center">
-              <p className="text-xs font-medium text-[var(--quiet)]">Step 1 of 3</p>
+              <p className="text-xs font-medium text-[var(--quiet)]">Step 2 of 4</p>
               <h1 id="substack-onboarding-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Connect your Substack</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">Type your profile or publication name, or paste its link.</p>
             </div>
@@ -606,7 +701,7 @@ export function SubstackOnboardingDialog({
                 }}
                 onBlur={() => setSuggestionsOpen(false)}
                 placeholder="creator"
-                className="h-12 w-full rounded-lg border border-transparent bg-[var(--surface-muted)] text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[rgba(22,24,29,0.2)]"
+                className="h-12 w-full rounded-lg border border-transparent bg-[var(--surface-muted)] px-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[rgba(22,24,29,0.2)]"
                 autoFocus
                 autoCapitalize="none"
                 autoCorrect="off"
@@ -622,7 +717,7 @@ export function SubstackOnboardingDialog({
                   input reads as a bare handle — a pasted link or a multi-word
                   name hides it, so a URL is never doubled. */}
               {(input === "" || /^[a-z0-9-]+$/i.test(input.trim())) && (
-                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 flex max-w-full items-center overflow-hidden pl-[0.875rem] text-sm">
+                <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 flex max-w-full items-center overflow-hidden pl-3.5 text-sm">
                   <span className="invisible whitespace-pre">{input || "creator"}</span>
                   <span className="text-[var(--quiet)]">.substack.com</span>
                 </span>
@@ -648,12 +743,10 @@ export function SubstackOnboardingDialog({
                           // eslint-disable-next-line @next/next/no-img-element -- remote Substack logos aren't in next.config image domains
                           <img src={suggestion.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover" loading="lazy" />
                         ) : (
-                          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-[var(--surface-muted)] text-xs font-semibold text-[var(--muted)]">
-                            {suggestion.name.slice(0, 1).toUpperCase()}
-                          </span>
+                          <span className="h-8 w-8 shrink-0 rounded-md bg-[#dedfe3]" aria-hidden="true" />
                         )}
                         <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{suggestion.name}</span>
+                          <span className="block truncate text-sm font-medium">{suggestion.name || suggestion.subdomain}</span>
                           <span className="block truncate text-xs text-[var(--muted)]">
                             <span className="mono">{suggestion.subdomain}.substack.com</span>
                             {suggestion.subscribers ? ` · ${suggestion.subscribers}` : ""}
@@ -728,7 +821,7 @@ export function SubstackOnboardingDialog({
               <ArrowLeft size={15} />
             </button>
             <div className="text-center">
-              <p className="text-xs font-medium text-[var(--quiet)]">Step 2 of 3</p>
+              <p className="text-xs font-medium text-[var(--quiet)]">Step 3 of 4</p>
               <h1 id="substack-import-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Import your archive</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">Grab your export from Substack, then get it to us either way.</p>
             </div>
@@ -830,7 +923,7 @@ export function SubstackOnboardingDialog({
               <ArrowLeft size={15} />
             </button>
             <div className="text-center">
-              <p className="text-xs font-medium text-[var(--quiet)]">Step 3 of 3</p>
+              <p className="text-xs font-medium text-[var(--quiet)]">Step 4 of 4</p>
               <h1 id="substack-price-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Set your price</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">Choose what goes live, then set one price or fine-tune each post.</p>
             </div>

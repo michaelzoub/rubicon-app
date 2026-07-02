@@ -5864,12 +5864,40 @@ a {
 .dashboard-main button svg,
 .dashboard-main a.button svg { width: 14px; height: 14px; stroke-width: 1.75; }
 .dashboard-data-viz {
-  --river: #246bfd;
-  --river-deep: #1646a0;
+  /* Charts read as ink on paper: near-black marks, true black on hover. */
+  --river: #232327;
+  --river-deep: #000000;
 }
-.dashboard-nav-link:hover { background: rgba(255,255,255,.42); }
+.dashboard-nav-link,
+.dashboard-nav-icon-link,
+.dashboard-icon-button {
+  transition: background-color 220ms var(--ease-soft), color 220ms var(--ease-soft);
+}
+.dashboard-nav-link:hover,
+.dashboard-nav-icon-link:hover,
+.dashboard-chrome-controls .dashboard-icon-button:hover { background: rgba(18, 18, 22, 0.055); }
 .dashboard-nav-link.is-active,
 .dashboard-nav-icon-link.is-active { background: rgba(255,255,255,.58); }
+
+/* Sidebar open/close glides: the grid track and panel width ease together,
+   and the swapped-in panel content fades along. */
+@media (min-width: 1024px) {
+  .dashboard-canvas { transition: grid-template-columns 320ms var(--ease-out); }
+  .dashboard-sidebar { transition: width 320ms var(--ease-out); }
+}
+.dashboard-sidebar > * { animation: dashboard-sidebar-in 300ms var(--ease-out); }
+@keyframes dashboard-sidebar-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-canvas,
+  .dashboard-sidebar,
+  .dashboard-nav-link,
+  .dashboard-nav-icon-link,
+  .dashboard-icon-button { transition: none; }
+  .dashboard-sidebar > * { animation: none; }
+}
 
 .dashboard-theme .button-secondary,
 .dashboard-theme input,

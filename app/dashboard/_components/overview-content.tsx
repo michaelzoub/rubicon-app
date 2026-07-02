@@ -165,7 +165,7 @@ export function DashboardOverviewContent({
 
             {topArticles.length > 0 && (
               <Reveal delay={0.1} className="h-full">
-                <TopArticlesPodium articles={topArticles} />
+                <TopArticlesRanking articles={topArticles} />
               </Reveal>
             )}
           </div>
@@ -285,38 +285,45 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
   );
 }
 
-const PODIUM_LABELS = ["1st", "2nd", "3rd"] as const;
-
-function TopArticlesPodium({ articles }: { articles: NonNullable<DashboardOverviewProps["topArticles"]> }) {
-  const podiumOrder = articles.length === 3 ? [articles[1], articles[0], articles[2]] : articles;
+function TopArticlesRanking({ articles }: { articles: NonNullable<DashboardOverviewProps["topArticles"]> }) {
   return (
     <Card className="flex h-full min-h-[13rem] flex-col overflow-hidden p-3.5">
-      <h2 className="text-base font-semibold">Top articles</h2>
-      <div className="mt-3 grid flex-1 grid-cols-3 items-end gap-2">
-        {podiumOrder.map((article) => {
-          const rank = articles.indexOf(article);
-          const label = PODIUM_LABELS[rank] ?? PODIUM_LABELS[2];
-          const content = (
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-base font-semibold">Top articles</h2>
+        <span className="text-[0.68rem] text-[var(--muted)]">Ranked by earnings</span>
+      </div>
+      <ul className="mt-2 flex flex-1 flex-col justify-center">
+        {articles.slice(0, 3).map((article, rank) => {
+          const leader = rank === 0;
+          const row = (
             <>
-              <span className="grid h-8 w-8 place-items-center rounded-full border border-[var(--river-line)] bg-[var(--river-pale)] text-xs font-bold text-[var(--river-deep)]">
-                {label}
+              <span
+                className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[0.68rem] font-semibold tabular-nums ${
+                  leader ? "bg-[var(--ink)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"
+                }`}
+              >
+                {rank + 1}
               </span>
-              <span className="mt-3 truncate text-sm font-semibold leading-snug">{article.title}</span>
-              <span className="mt-auto pt-3 text-sm font-semibold tabular-nums">{article.earnings}</span>
+              <span className={`min-w-0 flex-1 truncate text-sm ${leader ? "font-semibold" : "font-medium"}`}>
+                {article.title}
+              </span>
+              <span className="shrink-0 text-sm font-semibold tabular-nums">{article.earnings}</span>
             </>
           );
-
-          const height = rank === 0 ? "min-h-[10.75rem]" : rank === 1 ? "min-h-[9.75rem]" : "min-h-[9rem]";
-          const className = `flex min-w-0 flex-col rounded-lg border border-[var(--line)] bg-white p-3 ${height}`;
-          return article.href ? (
-            <Link key={article.id ?? article.title} href={article.href} className={className}>
-              {content}
-            </Link>
-          ) : (
-            <div key={article.id ?? article.title} className={className}>{content}</div>
+          const rowClassName = "flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--surface-muted)]";
+          return (
+            <li key={article.id ?? article.title} className="min-w-0 border-t border-[var(--line)] first:border-t-0">
+              {article.href ? (
+                <Link href={article.href} className={rowClassName}>
+                  {row}
+                </Link>
+              ) : (
+                <div className={rowClassName}>{row}</div>
+              )}
+            </li>
           );
         })}
-      </div>
+      </ul>
     </Card>
   );
 }
@@ -385,7 +392,7 @@ export function ContentProtectionPolicy() {
         <div className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">
           {CONTENT_PROTECTION_RULES.map((rule) => (
             <div key={rule.title} className="grid grid-cols-[18px_1fr] gap-3 py-3">
-              <CheckCircle2 size={16} className="mt-0.5 text-[var(--river)]" aria-hidden="true" />
+              <CheckCircle2 size={16} className="mt-0.5 text-[var(--ink)]" aria-hidden="true" />
               <div>
                 <div className="text-sm font-semibold">{rule.title}</div>
                 <p className="mt-1 text-xs leading-5 text-[var(--muted)]">{rule.detail}</p>
@@ -409,7 +416,7 @@ function PaymentActivityRows({ rows }: { rows: DashboardOverviewPaymentRow[] }) 
           </span>
         }
         action={
-          <Link href="/dashboard/earnings" className="text-sm text-[var(--river-deep)] hover:underline">
+          <Link href="/dashboard/earnings" className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">
             View all
           </Link>
         }
@@ -448,7 +455,7 @@ function ArticleRows({ rows }: { rows: DashboardOverviewArticleRow[] }) {
       <CardHeader
         title="Your articles"
         action={
-          <Link href="/dashboard/articles" className="text-sm text-[var(--river-deep)] hover:underline">
+          <Link href="/dashboard/articles" className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">
             Manage
           </Link>
         }
@@ -508,12 +515,12 @@ function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
           wallet.address ? (
             <div className="flex items-center gap-4">
               {wallet.onWithdraw && (
-                <button type="button" onClick={wallet.onWithdraw} className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--river-deep)] hover:underline">
+                <button type="button" onClick={wallet.onWithdraw} className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--ink)] hover:underline">
                   <ArrowRight size={14} aria-hidden="true" /> Withdraw
                 </button>
               )}
               {wallet.onRefresh && (
-                <button type="button" onClick={wallet.onRefresh} className="inline-flex items-center gap-1.5 text-sm text-[var(--river-deep)] hover:underline">
+                <button type="button" onClick={wallet.onRefresh} className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">
                   <RefreshCw size={14} aria-hidden="true" /> Refresh
                 </button>
               )}
@@ -554,7 +561,7 @@ function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
                   href={wallet.explorerHref}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--river-deep)] hover:underline"
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline"
                 >
                   View on {wallet.explorerLabel ?? "explorer"} <ExternalLink size={11} aria-hidden="true" />
                 </a>
@@ -741,7 +748,7 @@ function ExportButton({
                       title={bg.label}
                       className={`relative overflow-hidden rounded-[var(--radius-ui)] transition-all ${
                         bgImage === bg.src
-                          ? "ring-2 ring-[var(--river)] ring-offset-1"
+                          ? "ring-2 ring-[var(--ink)] ring-offset-1"
                           : "ring-1 ring-[var(--line)] hover:ring-[var(--muted)]"
                       }`}
                       style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
