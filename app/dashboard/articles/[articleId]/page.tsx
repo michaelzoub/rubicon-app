@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Archive, ArrowLeft, Eye, Pause, Play } from "lucide-react";
+import { Archive, ArrowLeft, Eye, Loader2, Pause, Play, Trash2, X } from "lucide-react";
 import type { ArticleDetail } from "@/lib/rubicon/types";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import {
@@ -38,6 +38,7 @@ export default function ArticleDetailPage() {
   const publish = useRubiconMutation((c, id: string) => c.publishArticle(id));
   const pause = useRubiconMutation((c, id: string) => c.pauseArticle(id));
   const archive = useRubiconMutation((c, id: string) => c.archiveArticle(id));
+  const remove = useRubiconMutation((c, id: string) => c.deleteArticle(id));
   const update = useRubiconMutation((c, ...args: Parameters<typeof c.updateArticle>) => c.updateArticle(...args));
 
   const data = article.data;
@@ -52,6 +53,7 @@ export default function ArticleDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const agentPreviewArticle = data
     ? {
         title: data.title,
@@ -118,6 +120,13 @@ export default function ArticleDetailPage() {
                   <Archive size={15} aria-hidden="true" /> Archive
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                className="button button-secondary text-sm text-[#8d2f2d]"
+              >
+                <Trash2 size={15} aria-hidden="true" /> Delete
+              </button>
             </div>
           </div>
           {data.state !== "live" && data.state !== "archived" && data.state !== "deleted" && (
@@ -135,9 +144,61 @@ export default function ArticleDetailPage() {
           )}
           <AgentPreviewDialog article={agentPreviewArticle} open={previewOpen} onClose={() => setPreviewOpen(false)} />
 
-          {(publish.error || pause.error || archive.error) && (
+          {(publish.error || pause.error || archive.error || remove.error) && (
             <div className="rounded-lg bg-[#fff1f0] px-4 py-3 text-sm text-[#8d2f2d]">
-              {(publish.error ?? pause.error ?? archive.error)?.message}
+              {(publish.error ?? pause.error ?? archive.error ?? remove.error)?.message}
+            </div>
+          )}
+
+          {deleteOpen && (
+            <div
+              className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-article-title"
+              onClick={() => !remove.pending && setDeleteOpen(false)}
+            >
+              <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-white p-6" onClick={(event) => event.stopPropagation()}>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 id="delete-article-title" className="text-lg font-semibold">Delete this article?</h2>
+                    <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                      This permanently removes “{data.title}” and its associated records from Supabase. This can’t be undone.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteOpen(false)}
+                    disabled={remove.pending}
+                    className="dashboard-icon-button shrink-0"
+                    aria-label="Close delete confirmation"
+                  >
+                    <X size={17} />
+                  </button>
+                </div>
+                <div className="mt-6 flex justify-end gap-2">
+                  <button type="button" onClick={() => setDeleteOpen(false)} disabled={remove.pending} className="button button-secondary text-sm">
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="confirm-delete-article"
+                    onClick={async () => {
+                      try {
+                        await remove.run(data.id);
+                        router.push("/dashboard/articles");
+                      } catch {
+                        // The mutation error remains visible above the article.
+                      }
+                    }}
+                    disabled={remove.pending}
+                    className="button border border-[#8d2f2d] bg-[#8d2f2d] text-sm text-white hover:bg-[#742624] disabled:opacity-50"
+                  >
+                    {remove.pending ? <><Loader2 size={15} className="animate-spin" /> Deleting…</> : <><Trash2 size={15} /> Delete permanently</>}
+                  </button>
+                </div>
+                {remove.error && <p className="mt-3 text-sm text-[#8d2f2d]" role="alert">{remove.error.message}</p>}
+              </div>
             </div>
           )}
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, Loader2, Mail, MousePointer2, X } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { parseSubstackSubdomain } from "@/lib/import/substack-subdomain";
 import { useRubiconClient } from "@/lib/rubicon/auth";
@@ -28,7 +29,7 @@ function snapPrice(usd: number): number {
   return Math.round(clamped / PRICE_STEP) * PRICE_STEP;
 }
 
-type Step = "welcome" | "connect" | "import" | "price";
+type Step = "welcome" | "connect" | "import" | "price" | "success";
 
 interface LookupState {
   status: "idle" | "checking" | "found" | "missing";
@@ -92,6 +93,7 @@ export function SubstackOnboardingDialog({
   demo?: boolean;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const client = useRubiconClient();
   const { getAccessToken } = usePrivy();
   const reduceMotion = useReducedMotion();
@@ -129,10 +131,14 @@ export function SubstackOnboardingDialog({
    * the recommended shortcut clear it. */
   const [priceDraft, setPriceDraft] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  /** Every parsed post starts selected; writers can exclude posts before they
+   * become live articles and therefore accessible to buyer agents. */
+  const [selectedPostIds, setSelectedPostIds] = useState<string[]>([]);
   /** Raw per-post price inputs; empty/invalid entries fall back to the global price. */
   const [postPrices, setPostPrices] = useState<Record<string, string>>({});
   const [goingLive, setGoingLive] = useState(false);
   const [priceError, setPriceError] = useState<string | null>(null);
+  const [publishedCount, setPublishedCount] = useState(0);
 
   function effectivePostPrice(postId: string): number {
     const raw = postPrices[postId];
@@ -190,6 +196,7 @@ export function SubstackOnboardingDialog({
         window.localStorage.setItem(SUBDOMAIN_KEY, body.subdomain);
         if (body.pendingArchive) {
           setArchive(body.pendingArchive);
+          setSelectedPostIds(body.pendingArchive.posts.map((post) => post.id));
           setStep("price");
         } else {
           setStep((current) => (current === "welcome" || current === "connect" ? "import" : current));
@@ -384,6 +391,7 @@ export function SubstackOnboardingDialog({
         recommendedPriceUsd: totalWordCount > 0 ? weightedCents / totalWordCount / 100 : 0,
         posts: importable.map((row) => ({ id: row.id, title: row.title, wordCount: Number(row.wordCount || 0) })),
       });
+      setSelectedPostIds(importable.map((row) => row.id));
       setUploadState({ phase: "idle" });
       setStep("price");
     } catch (cause) {
@@ -430,7 +438,7 @@ export function SubstackOnboardingDialog({
   }, [demo, open, step]);
 
   async function goLive() {
-    if (!archive || goingLive || navigatingRef.current) return;
+    if (!archive || selectedPostIds.length === 0 || goingLive || navigatingRef.current) return;
     setGoingLive(true);
     setPriceError(null);
     try {
@@ -444,18 +452,28 @@ export function SubstackOnboardingDialog({
           // Per-post selections carry any drawer overrides; the global price is
           // still persisted as the creator's default.
           ...(archive.posts.length
-            ? { selections: archive.posts.map((post) => ({ id: post.id, pricePerWordCents: Number((effectivePostPrice(post.id) * 100).toFixed(4)) })) }
+            ? { selections: archive.posts
+                .filter((post) => selectedPostIds.includes(post.id))
+                .map((post) => ({ id: post.id, pricePerWordCents: Number((effectivePostPrice(post.id) * 100).toFixed(4)) })) }
             : { applyToAll: true }),
           globalPricePerWordCents: Number((price * 100).toFixed(4)),
           goLive: true,
         }),
       });
-      const body = await response.json().catch(() => null);
+      const body = await response.json().catch(() => null) as { imported?: number; error?: { message?: string } } | null;
       if (!response.ok) throw new Error(body?.error?.message || "Could not publish your archive.");
-      navigatingRef.current = true;
+
+      // The import uses a server route rather than useRubiconMutation, so it
+      // must explicitly invalidate the dashboard cache. Await active refetches
+      // before navigating so Articles and Overview read the persisted import
+      // immediately instead of retaining their cached empty state.
+      await queryClient.invalidateQueries({ queryKey: ["rubicon"] });
+
       window.localStorage.setItem(SEEN_KEY, "1");
       window.localStorage.removeItem(SUBDOMAIN_KEY);
-      router.push("/dashboard/articles");
+      setPublishedCount(body?.imported ?? selectedPostIds.length);
+      setGoingLive(false);
+      setStep("success");
     } catch (cause) {
       setPriceError(cause instanceof Error ? cause.message : "Could not publish your archive.");
       setGoingLive(false);
@@ -467,6 +485,12 @@ export function SubstackOnboardingDialog({
     setOpen(false);
   }
 
+  function viewArticles() {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+    router.push("/dashboard/articles");
+  }
+
   if (!open) return null;
 
   const settingsUrl = subdomain ? `https://${subdomain}.substack.com/publish/settings#import-export-settings` : null;
@@ -474,15 +498,17 @@ export function SubstackOnboardingDialog({
   const cardClass = "relative z-10 w-full rounded-lg border border-black/[0.06] bg-white p-8 max-sm:max-w-none max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-5 max-sm:py-7";
   const sliderPercent = ((price - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 100;
   const recommendedPrice = archive && archive.recommendedPriceUsd > 0 ? snapPrice(archive.recommendedPriceUsd) : null;
+  const selectedPosts = archive?.posts.filter((post) => selectedPostIds.includes(post.id)) ?? [];
+  const selectedWordCount = selectedPosts.reduce((sum, post) => sum + post.wordCount, 0);
   // The archive total honours drawer overrides; the average-post tile tracks
   // the global slider so the two stay easy to compare.
   const archiveTotalUsd = archive
     ? archive.posts.length
-      ? archive.posts.reduce((sum, post) => sum + post.wordCount * effectivePostPrice(post.id), 0)
+      ? selectedPosts.reduce((sum, post) => sum + post.wordCount * effectivePostPrice(post.id), 0)
       : archive.totalWordCount * price
     : 0;
   const overrideCount = archive
-    ? archive.posts.filter((post) => Math.abs(effectivePostPrice(post.id) - price) > 1e-9).length
+    ? selectedPosts.filter((post) => Math.abs(effectivePostPrice(post.id) - price) > 1e-9).length
     : 0;
 
   return (
@@ -806,7 +832,7 @@ export function SubstackOnboardingDialog({
             <div className="text-center">
               <p className="text-xs font-medium text-[var(--quiet)]">Step 3 of 3</p>
               <h1 id="substack-price-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Set your price</h1>
-              <p className="mt-2 text-sm text-[var(--muted)]">One price for everything, or fine-tune individual posts below.</p>
+              <p className="mt-2 text-sm text-[var(--muted)]">Choose what goes live, then set one price or fine-tune each post.</p>
             </div>
 
             <div className="mt-7">
@@ -876,7 +902,7 @@ export function SubstackOnboardingDialog({
                   ${archiveTotalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="mt-1 text-xs text-[var(--muted)]" role="status" data-testid="import-summary">
-                  {archive.postCount.toLocaleString()} posts · {archive.totalWordCount.toLocaleString()} words
+                  {selectedPosts.length.toLocaleString()} of {archive.postCount.toLocaleString()} posts · {selectedWordCount.toLocaleString()} words
                 </div>
               </div>
             </div>
@@ -890,10 +916,11 @@ export function SubstackOnboardingDialog({
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
                 >
                   <span>
-                    <span className="block text-sm font-medium">Fine-tune individual posts</span>
-                    <span className="mt-0.5 block text-xs text-[var(--muted)]">Give specific posts their own per-word price.</span>
+                    <span className="block text-sm font-medium">Choose and price posts</span>
+                    <span className="mt-0.5 block text-xs text-[var(--muted)]">Only selected posts become accessible to agents.</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-2 text-xs text-[var(--muted)]">
+                    <span className="rounded-md bg-white px-1.5 py-0.5 font-medium">{selectedPosts.length}/{archive.posts.length} selected</span>
                     {overrideCount > 0 && <span className="rounded-md bg-white px-1.5 py-0.5 font-medium">{overrideCount} adjusted</span>}
                     <ChevronDown size={16} className={`transition-transform ${drawerOpen ? "rotate-180" : ""}`} aria-hidden="true" />
                   </span>
@@ -902,12 +929,23 @@ export function SubstackOnboardingDialog({
                   <ul className="max-h-52 overflow-y-auto border-t border-[var(--line)]">
                     {archive.posts.map((post) => (
                       <li key={post.id} className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-2.5 last:border-b-0">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium">{post.title || "Untitled post"}</div>
-                          <div className="mt-0.5 text-xs tabular-nums text-[var(--muted)]">
-                            {post.wordCount.toLocaleString()} words · ${(post.wordCount * effectivePostPrice(post.id)).toFixed(2)}
+                        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedPostIds.includes(post.id)}
+                            onChange={(event) => setSelectedPostIds((current) => event.target.checked
+                              ? [...current, post.id]
+                              : current.filter((id) => id !== post.id))}
+                            className="h-4 w-4 shrink-0 accent-[var(--ink)]"
+                            aria-label={`Import ${post.title || "untitled post"}`}
+                          />
+                          <div className={`min-w-0 ${selectedPostIds.includes(post.id) ? "" : "opacity-50"}`}>
+                            <div className="truncate text-sm font-medium">{post.title || "Untitled post"}</div>
+                            <div className="mt-0.5 text-xs tabular-nums text-[var(--muted)]">
+                              {post.wordCount.toLocaleString()} words · ${(post.wordCount * effectivePostPrice(post.id)).toFixed(2)}
+                            </div>
                           </div>
-                        </div>
+                        </label>
                         <label className="flex shrink-0 items-center gap-1 text-xs text-[var(--muted)]">
                           $
                           <input
@@ -917,6 +955,7 @@ export function SubstackOnboardingDialog({
                             max={PRICE_MAX}
                             step={PRICE_STEP}
                             value={postPrices[post.id] ?? price.toFixed(4)}
+                            disabled={!selectedPostIds.includes(post.id)}
                             onChange={(event) => setPostPrices((current) => ({ ...current, [post.id]: event.target.value }))}
                             className="h-8 w-24 rounded-md bg-white px-2 text-sm tabular-nums outline-none transition focus:ring-2 focus:ring-[rgba(22,24,29,0.2)]"
                             aria-label={`Price per word for ${post.title || "untitled post"}`}
@@ -935,10 +974,40 @@ export function SubstackOnboardingDialog({
               type="button"
               data-testid="go-live-button"
               onClick={goLive}
-              disabled={goingLive}
+              disabled={goingLive || selectedPostIds.length === 0}
               className="button button-primary mt-5 w-full justify-center py-3 disabled:opacity-40"
             >
-              {goingLive ? <><Loader2 size={16} className="animate-spin" /> Publishing…</> : <>Go live <ArrowRight size={16} /></>}
+              {goingLive ? <><Loader2 size={16} className="animate-spin" /> Publishing…</> : selectedPostIds.length === 0 ? "Select at least one post" : <>Go live with {selectedPosts.length} {selectedPosts.length === 1 ? "post" : "posts"} <ArrowRight size={16} /></>}
+            </button>
+          </motion.section>
+        )}
+
+        {step === "success" && (
+          <motion.section
+            key="success"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="substack-success-title"
+            className={`${cardClass} max-w-md text-center`}
+            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.01 : 0.24, ease: EASE_OUT }}
+          >
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-[var(--surface-muted)] text-[var(--ink)]" aria-hidden="true">
+              <Check size={23} strokeWidth={2.25} />
+            </div>
+            <h1 id="substack-success-title" className="mt-5 text-2xl font-semibold tracking-[-0.02em]">
+              {publishedCount === 1 ? "Your article is live" : `${publishedCount} articles are live`}
+            </h1>
+            <p className="mt-2 text-sm text-[var(--muted)]">Agents can now discover and access {publishedCount === 1 ? "it" : "them"}.</p>
+            <button
+              type="button"
+              data-testid="view-articles-button"
+              onClick={viewArticles}
+              className="button button-primary mt-7 w-full justify-center py-3"
+            >
+              View {publishedCount === 1 ? "article" : "articles"} <ArrowRight size={16} />
             </button>
           </motion.section>
         )}

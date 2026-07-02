@@ -745,6 +745,16 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
       );
     },
 
+    async deleteArticle(articleId: string): Promise<void> {
+      requireIdentity(getIdentity);
+      const deleted = await must(
+        supabase.rpc("delete_article_permanently", { target_article_id: articleId }),
+      );
+      if (deleted !== true) {
+        throw new RubiconError("not_found", 404, "article_not_found", "Article was not found or you do not have permission to delete it.");
+      }
+    },
+
     async getEarnings(): Promise<EarningsSummary> {
       const identity = requireIdentity(getIdentity);
       // Settled earnings / words paid come from the Circle Gateway settlement

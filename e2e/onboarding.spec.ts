@@ -101,9 +101,10 @@ async function mockBackend(page: Page, articles: Array<ReturnType<typeof liveArt
     }),
   );
   await page.route("**/api/import/substack/commit", (route) => {
-    // Going live: the articles list the dashboard reads next now has live rows.
-    articles.push(liveArticleRow("article_e2e_1", "Post one"), liveArticleRow("article_e2e_2", "Post two"));
-    return route.fulfill({ json: { imported: 2, articleIds: ["article_e2e_1", "article_e2e_2"] } });
+    const selections = route.request().postDataJSON().selections as Array<{ id: string }>;
+    const selected = selections.map((selection, index) => liveArticleRow(`article_e2e_${index + 1}`, selection.id === "cand_1" ? "Post one" : "Post two"));
+    articles.push(...selected);
+    return route.fulfill({ json: { imported: selected.length, articleIds: selected.map((article) => article.id) } });
   });
 }
 
@@ -153,7 +154,12 @@ test.describe("Substack onboarding (agent-readable UI)", () => {
     await expect(container).toHaveAttribute("data-onboarding-step", "price");
     await expect(page.getByRole("heading", { name: "Set your price" })).toBeVisible();
     await expect(page.getByText("Step 3 of 3")).toBeVisible();
-    await expect(page.getByTestId("import-summary")).toHaveText(/2 posts · 3,400 words/);
+    await expect(page.getByTestId("import-summary")).toHaveText(/2 of 2 posts · 3,400 words/);
+
+    await page.getByRole("button", { name: /Choose and price posts/ }).click();
+    await page.getByLabel("Import Post two").uncheck();
+    await expect(page.getByTestId("import-summary")).toHaveText(/1 of 2 posts · 1,200 words/);
+    await expect(page.getByTestId("go-live-button")).toContainText("Go live with 1 post");
 
     const priceInput = page.getByTestId("price-input");
     await priceInput.fill("0.002");
@@ -164,6 +170,11 @@ test.describe("Substack onboarding (agent-readable UI)", () => {
     await expect(page.getByLabel("Price per word in USDC").first()).toBeVisible();
 
     await page.getByTestId("go-live-button").click();
+
+    // Publishing confirms success before the creator chooses to leave onboarding.
+    await expect(container).toHaveAttribute("data-onboarding-step", "success");
+    await expect(page.getByRole("heading", { name: "Your article is live" })).toBeVisible();
+    await page.getByTestId("view-articles-button").click();
 
     // Post-go-live landing: the live article link is a readable href. Reload
     // once — the dashboard caches queries for 30s, and a fresh observation is
