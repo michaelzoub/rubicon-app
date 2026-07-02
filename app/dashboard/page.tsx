@@ -24,8 +24,8 @@ import { ACTIVE_CHAIN } from "@/lib/chain";
 import { explorerAddressUrl, formatBalance, useNativeBalance } from "@/lib/onchain";
 import { WithdrawDialog } from "./_components/withdraw-dialog";
 import { CountUp, Donut, DONUT_COLORS, InsightTile, Reveal, type DonutSlice, type TrendBar } from "./_components/charts";
-import { ContentProtectionPolicy, DashboardOverviewContent, OverviewSkeleton, type DashboardOverviewProps } from "./_components/overview-content";
-import { SubstackOnboardingDialog } from "./_components/substack-onboarding-dialog";
+import { ContentProtectionPolicy, DashboardOverviewContent, type DashboardOverviewProps } from "./_components/overview-content";
+import { OnboardingEntryScreen, SubstackOnboardingDialog } from "./_components/substack-onboarding-dialog";
 import {
   ArticleStatePill,
   Card,
@@ -204,7 +204,7 @@ export default function OverviewPage() {
   return (
     <div className="grid gap-5">
       {initialLoading ? (
-        <OverviewSkeleton />
+        <OnboardingEntryScreen />
       ) : firstError && firstError.error ? (
         <ErrorState
           error={firstError.error}

@@ -1,7 +1,7 @@
 "use client";
 
-import OverviewPage from "../dashboard/page";
+import { SubstackOnboardingDialog } from "../dashboard/_components/substack-onboarding-dialog";
 
 export default function NewUserDashboardPage() {
-  return <OverviewPage />;
+  return <SubstackOnboardingDialog shouldOpen forceOpen />;
 }

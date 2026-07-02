@@ -19,7 +19,7 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { usePrivyConfigured } from "../../providers";
 import { RubiconBrand } from "../../_components/rubicon-brand";
-import { OverviewSkeleton } from "./overview-content";
+import { OnboardingEntryScreen } from "./substack-onboarding-dialog";
 import { DashboardPageSkeleton } from "./ui";
 
 const navSections = [
@@ -51,12 +51,15 @@ function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   if (!ready) {
-    // Show the dashboard chrome with the shimmer skeleton in place of a spinner
-    // screen — the loading state should look like the workspace settling in, not
-    // a black spinner flash.
+    // Overview can resolve to either onboarding or the dashboard. Avoid painting
+    // dashboard chrome until that decision is known, otherwise new writers see
+    // the wrong product state flash before onboarding opens.
+    if (pathname === "/dashboard" || pathname === "/dashboard-newuser") {
+      return <OnboardingEntryScreen />;
+    }
     return (
       <DashboardFrame identity="Writer">
-        {pathname === "/dashboard" || pathname === "/dashboard-newuser" ? <OverviewSkeleton /> : <DashboardPageSkeleton />}
+        <DashboardPageSkeleton />
       </DashboardFrame>
     );
   }

@@ -67,6 +67,24 @@ type UploadState =
   | { phase: "parsing" }
   | { phase: "error"; message: string };
 
+/**
+ * First-paint surface while auth and creator state resolve. It deliberately
+ * matches the opening onboarding frame so a new writer never sees dashboard
+ * chrome before the flow begins.
+ */
+export function OnboardingEntryScreen() {
+  return (
+    <div className="fixed inset-0 z-50 grid items-center justify-items-center overflow-hidden bg-white p-5">
+      <OnboardingTileBackground />
+      <section className="relative z-10 grid justify-items-center rounded-lg bg-white px-12 py-10 text-center" aria-live="polite">
+        <Image src="/w_logo.png" alt="Rubicon" width={68} height={68} priority />
+        <h1 className="mt-7 text-3xl font-semibold tracking-[-0.025em] text-[var(--ink)]">Welcome to Rubicon</h1>
+        <p className="mt-2 text-sm text-[var(--muted)]">Making writing available to agents</p>
+      </section>
+    </div>
+  );
+}
+
 export function SubstackOnboardingDialog({
   shouldOpen,
   forceOpen = false,
@@ -82,7 +100,11 @@ export function SubstackOnboardingDialog({
   const client = useRubiconClient();
   const { getAccessToken } = usePrivy();
   const reduceMotion = useReducedMotion();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(() => {
+    if (!shouldOpen) return false;
+    if (forceOpen || demo) return true;
+    return typeof window !== "undefined" && window.localStorage.getItem(SEEN_KEY) !== "1";
+  });
   const [step, setStep] = useState<Step>("welcome");
 
   // Step 1 — connect
