@@ -74,13 +74,8 @@ type UploadState =
  */
 export function OnboardingEntryScreen() {
   return (
-    <div className="fixed inset-0 z-50 grid items-center justify-items-center overflow-hidden bg-white p-5">
-      <OnboardingTileBackground />
-      <section className="relative z-10 grid justify-items-center rounded-lg bg-white px-12 py-10 text-center" aria-live="polite">
-        <Image src="/w_logo.png" alt="Rubicon" width={68} height={68} priority />
-        <h1 className="mt-7 text-3xl font-semibold tracking-[-0.025em] text-[var(--ink)]">Welcome to Rubicon</h1>
-        <p className="mt-2 text-sm text-[var(--muted)]">Making writing available to agents</p>
-      </section>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-white" role="status" aria-label="Loading Rubicon">
+      <Image className="animate-pulse" src="/w_logo.png" alt="" width={52} height={52} priority />
     </div>
   );
 }
@@ -584,7 +579,7 @@ export function SubstackOnboardingDialog({
                   if (event.key === "Enter") continueToImport();
                 }}
                 onBlur={() => setSuggestionsOpen(false)}
-                placeholder="wenkafka"
+                placeholder="creator"
                 className="h-12 w-full rounded-lg border border-transparent bg-[var(--surface-muted)] text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[rgba(22,24,29,0.2)]"
                 autoFocus
                 autoCapitalize="none"
@@ -602,7 +597,7 @@ export function SubstackOnboardingDialog({
                   name hides it, so a URL is never doubled. */}
               {(input === "" || /^[a-z0-9-]+$/i.test(input.trim())) && (
                 <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 flex max-w-full items-center overflow-hidden pl-[0.875rem] text-sm">
-                  <span className="invisible whitespace-pre">{input || "wenkafka"}</span>
+                  <span className="invisible whitespace-pre">{input || "creator"}</span>
                   <span className="text-[var(--quiet)]">.substack.com</span>
                 </span>
               )}
