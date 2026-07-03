@@ -5,7 +5,7 @@ import { ImportServerError, serviceClient } from "@/lib/rubicon/import-server";
 
 export const runtime = "nodejs";
 
-interface Selection { id: string; pricePerWordCents: number }
+interface Selection { id: string; pricePerWordCents: number; accessMode?: "free" | "paid" }
 
 interface CommitBody {
   jobId?: string;
@@ -31,9 +31,11 @@ export async function POST(request: Request) {
     const globalPriceCents = body.globalPricePerWordCents;
     const hasValidGlobalPrice = isValidOnboardingPrice(globalPriceCents);
     const selections = Array.isArray(body.selections)
-      ? body.selections.filter((item) => item?.id && isValidOnboardingPrice(item.pricePerWordCents))
+      ? body.selections.filter((item) => item?.id && (item.accessMode === "free" || isValidOnboardingPrice(item.pricePerWordCents)))
       : [];
-    if (!body.jobId || !hasValidGlobalPrice || (!body.applyToAll && !selections.length)) {
+    // The global price is only meaningful when pricing the whole job at once;
+    // per-selection commits (the dashboard import page) carry their own prices.
+    if (!body.jobId || (body.applyToAll ? !hasValidGlobalPrice : !selections.length)) {
       return responseError(400, "invalid_selection", "Select at least one importable post.");
     }
     const accessMode = body.accessMode === "free" ? "free" : "paid";
@@ -47,18 +49,25 @@ export async function POST(request: Request) {
     const candidates = data ?? [];
     const priceById = new Map(
       body.applyToAll
-        ? candidates.map((candidate) => [candidate.id, globalPriceCents])
+        ? candidates.map((candidate) => [candidate.id, globalPriceCents ?? 0])
         : selections.map((item) => [item.id, item.pricePerWordCents]),
     );
+    // Per-selection access modes override the job-wide one, so a single commit
+    // can mix free and paid posts. Selections without a mode inherit it.
+    const modeById = new Map(
+      selections.filter((item) => item.accessMode).map((item) => [item.id, item.accessMode!]),
+    );
+    const selectedIds = new Set(body.applyToAll ? candidates.map((candidate) => candidate.id) : selections.map((item) => item.id));
     const now = new Date().toISOString();
-    const articleRows = candidates.filter((candidate) => !candidate.warning).map((candidate) => {
-      const cents = priceById.get(candidate.id)!;
+    const articleRows = candidates.filter((candidate) => !candidate.warning && selectedIds.has(candidate.id)).map((candidate) => {
+      const mode = body.applyToAll ? accessMode : modeById.get(candidate.id) ?? accessMode;
+      const cents = mode === "free" ? 0 : priceById.get(candidate.id) ?? 0;
       const articleId = `article_${crypto.randomUUID()}`;
       const sections = Array.isArray(candidate.sections_json_private) ? candidate.sections_json_private as Array<{ heading?: string | null; text?: string }> : [];
       const bodyText = sections.map((section) => `${section.heading ? `## ${section.heading}\n\n` : ""}${section.text ?? ""}`).join("\n\n").trim() || candidate.plain_text_private;
       return { articleId, candidate, bodyText, sections, row: {
         id: articleId, creator_id: creatorId, title: candidate.title, author: body.substackUsername?.trim() || "Substack creator",
-        state: body.goLive ? "live" : "draft", access_mode: accessMode, price_per_word_atomic: String(Math.round(cents * 10_000)),
+        state: body.goLive ? "live" : "draft", access_mode: mode, price_per_word_atomic: String(Math.round(cents * 10_000)),
         max_article_price_atomic: String(Math.round(cents * Number(candidate.word_count) * 10_000)),
         total_words: candidate.word_count, revision: 1, seller_agent_config: null, body: bodyText,
         is_imported: true, source_platform: "substack", source_url: body.substackUsername ? `https://${body.substackUsername}.substack.com` : null,
@@ -79,7 +88,10 @@ export async function POST(request: Request) {
       });
       if (sectionRows.length) await supabase.from("article_sections").insert(sectionRows);
       await supabase.from("article_revisions").insert(articleRows.map((item) => ({ id: `revision_${crypto.randomUUID()}`, article_id: item.articleId, revision: 1, body: item.bodyText })));
-      await Promise.all(articleRows.map((item) => supabase.from("creator_import_candidates").update({ status: "imported", selected_price_per_word_cents: priceById.get(item.candidate.id), updated_at: now }).eq("id", item.candidate.id)));
+      await Promise.all(articleRows.map((item) => {
+        const mode = body.applyToAll ? accessMode : modeById.get(item.candidate.id) ?? accessMode;
+        return supabase.from("creator_import_candidates").update({ status: "imported", selected_price_per_word_cents: mode === "free" ? 0 : priceById.get(item.candidate.id), updated_at: now }).eq("id", item.candidate.id);
+      }));
     }
     await supabase.from("creator_import_jobs").update({ status: "imported", imported_posts: articleRows.length, updated_at: now }).eq("id", body.jobId).eq("creator_id", creatorId);
     // Only persist a creator-wide default from a real positive price — a free

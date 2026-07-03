@@ -29,6 +29,7 @@ export default function SubstackExportPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [prices, setPrices] = useState<Record<string, number>>({});
+  const [freeIds, setFreeIds] = useState<Set<string>>(new Set());
   const [onePrice, setOnePrice] = useState("0.015");
   const username = params.get("username") || (typeof window !== "undefined" ? window.localStorage.getItem("rubicon-substack-username") : "") || "";
   const selectedCount = selected.size;
@@ -60,11 +61,28 @@ export default function SubstackExportPage() {
 
   function handleFiles(event: ChangeEvent<HTMLInputElement>) { void upload(Array.from(event.target.files ?? [])); event.target.value = ""; }
   function handleDrop(event: DragEvent<HTMLDivElement>) { event.preventDefault(); setDragging(false); void upload(Array.from(event.dataTransfer.files)); }
-  function useRecommended() { setPrices(Object.fromEntries(candidates.map((row) => [row.id, row.recommendedPricePerWordCents]))); }
+  // Bulk pricing is an explicit "price everything" action, so it also clears
+  // any per-post free marks — otherwise the new price would silently not apply.
+  function useRecommended() { setPrices(Object.fromEntries(candidates.map((row) => [row.id, row.recommendedPricePerWordCents]))); setFreeIds(new Set()); }
   function applyOnePrice() {
     const price = Number(onePrice);
     if (!(price > 0 && price <= 0.08)) return setError("Enter a price from 0.001¢ to 0.08¢ per word.");
-    setPrices((current) => ({ ...current, ...Object.fromEntries(importable.map((row) => [row.id, price])) })); setError(null);
+    setPrices((current) => ({ ...current, ...Object.fromEntries(importable.map((row) => [row.id, price])) })); setFreeIds(new Set()); setError(null);
+  }
+  function toggleFree(id: string, free: boolean) {
+    setFreeIds((current) => { const next = new Set(current); free ? next.add(id) : next.delete(id); return next; });
+  }
+  const selectedImportableIds = useMemo(
+    () => importable.filter((row) => selected.has(row.id)).map((row) => row.id),
+    [importable, selected],
+  );
+  const selectedAreFree = selectedImportableIds.length > 0 && selectedImportableIds.every((id) => freeIds.has(id));
+  function toggleSelectedFree(free: boolean) {
+    setFreeIds((current) => {
+      const next = new Set(current);
+      selectedImportableIds.forEach((id) => free ? next.add(id) : next.delete(id));
+      return next;
+    });
   }
   async function commit() {
     if (!jobId || !selectedCount) return;
@@ -73,7 +91,15 @@ export default function SubstackExportPage() {
       const token = await getAccessToken();
       const response = await fetch("/api/import/substack/commit", {
         method: "POST", headers: { "content-type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ jobId, substackUsername: username, selections: [...selected].map((id) => ({ id, pricePerWordCents: prices[id] })) }),
+        body: JSON.stringify({
+          jobId,
+          substackUsername: username,
+          selections: [...selected].map((id) => ({
+            id,
+            pricePerWordCents: freeIds.has(id) ? 0 : prices[id],
+            accessMode: freeIds.has(id) ? "free" : "paid",
+          })),
+        }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error?.message || "Could not create the drafts.");
@@ -109,11 +135,15 @@ export default function SubstackExportPage() {
       {jobId && <>
         <Card className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-3">
               <button type="button" onClick={useRecommended} className="button button-secondary text-sm">Use recommended pricing for all</button>
               <span className="group relative inline-flex items-center"><Info size={16} className="text-[var(--muted)]" aria-label="Pricing information" />
                 <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 hidden w-72 -translate-x-1/2 rounded-lg border border-[var(--line)] bg-white p-3 text-xs leading-5 text-[var(--muted)] group-hover:block">Recommended pricing is based on length, structure, links, data/code signals, and whether the post appears to be paid/private.</span>
               </span>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-sm font-medium">
+                <input type="checkbox" checked={selectedAreFree} disabled={!selectedImportableIds.length} onChange={(event) => toggleSelectedFree(event.target.checked)} />
+                Make selected article{selectedImportableIds.length === 1 ? "" : "s"} free
+              </label>
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <label className="grid gap-1"><span className="text-xs font-medium text-[var(--muted)]">Price per word (¢)</span><input value={onePrice} onChange={(e) => setOnePrice(e.target.value)} inputMode="decimal" className="h-10 w-36 rounded-lg border border-[var(--line)] bg-white px-3 outline-none focus:border-[var(--river-deep)]" /></label>
@@ -131,8 +161,14 @@ export default function SubstackExportPage() {
               <td className="max-w-xs p-3 align-top"><div className="font-medium">{candidate.title}</div>{candidate.subtitle && <div className="mt-1 line-clamp-2 text-xs text-[var(--muted)]">{candidate.subtitle}</div>}</td>
               <td className="p-3 align-top text-[var(--muted)]">{candidate.publishedAt ? new Date(candidate.publishedAt).toLocaleDateString() : "—"}</td>
               <td className="p-3 align-top">{candidate.audience || "—"}</td><td className="p-3 text-right align-top tabular-nums">{candidate.wordCount.toLocaleString()}</td>
-              <td className="p-3 align-top"><input type="number" min="0.001" max="0.08" step="0.001" disabled={!candidate.importable} value={prices[candidate.id] ?? candidate.recommendedPricePerWordCents} onChange={(e) => setPrices((current) => ({ ...current, [candidate.id]: Number(e.target.value) }))} className="h-9 w-24 rounded-lg border border-[var(--line)] px-2 tabular-nums outline-none focus:border-[var(--river-deep)]" /><div className="mt-1 text-xs text-[var(--muted)]">Recommended: {candidate.recommendedPricePerWordCents.toFixed(3)}¢</div></td>
-              <td className="p-3 text-right align-top tabular-nums">${((candidate.wordCount * (prices[candidate.id] ?? candidate.recommendedPricePerWordCents)) / 100).toFixed(2)}</td>
+              <td className="p-3 align-top">
+                <input type="number" min="0.001" max="0.08" step="0.001" disabled={!candidate.importable || freeIds.has(candidate.id)} value={prices[candidate.id] ?? candidate.recommendedPricePerWordCents} onChange={(e) => setPrices((current) => ({ ...current, [candidate.id]: Number(e.target.value) }))} className="h-9 w-24 rounded-lg border border-[var(--line)] px-2 tabular-nums outline-none focus:border-[var(--river-deep)] disabled:bg-[var(--surface-muted)] disabled:text-[var(--muted)]" />
+                <div className="mt-1 text-xs text-[var(--muted)]">Recommended: {candidate.recommendedPricePerWordCents.toFixed(3)}¢</div>
+                <label className="mt-1.5 flex w-fit cursor-pointer items-center gap-1.5 text-xs font-medium">
+                  <input type="checkbox" checked={freeIds.has(candidate.id)} disabled={!candidate.importable} onChange={(e) => toggleFree(candidate.id, e.target.checked)} /> Free to read
+                </label>
+              </td>
+              <td className="p-3 text-right align-top tabular-nums">{freeIds.has(candidate.id) ? <span className="font-medium text-[#165c3e]">Free</span> : `$${((candidate.wordCount * (prices[candidate.id] ?? candidate.recommendedPricePerWordCents)) / 100).toFixed(2)}`}</td>
               <td className="p-3 align-top">{candidate.warning ? <span className="text-[#8d2f2d]">{candidate.warning}</span> : <span className="inline-flex items-center gap-1 text-[#165c3e]"><Check size={14} /> Ready</span>}</td>
             </tr>)}</tbody>
           </table></div>

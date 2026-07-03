@@ -2,7 +2,7 @@
 
 import { getEmbeddedConnectedWallet, useCreateWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Copy, ExternalLink, KeyRound, LogOut, ShieldCheck, Trash2, Wallet } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, Copy, ExternalLink, KeyRound, LogOut, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { RECEIVING_NETWORK, RECEIVING_NETWORK_LABEL } from "@/lib/chain";
 import {
@@ -20,6 +20,13 @@ export default function SettingsPage() {
   const wallet = useRubiconQuery((c) => c.getWallet(), [], { queryKey: ["wallet"] });
   const updateCreator = useRubiconMutation((c, ...a: Parameters<typeof c.updateCreator>) => c.updateCreator(...a));
   const updateWallet = useRubiconMutation((c, walletInput: { address: string; network: string; verified: boolean }) => c.updateWallet(walletInput));
+  // The payout card renders after its queries resolve, so repeat the native
+  // hash jump once the destination exists.
+  useEffect(() => {
+    if (typeof window === "undefined" || window.location.hash !== "#payout-connection") return;
+    if (creator.status !== "success" || wallet.status === "loading") return;
+    document.getElementById("payout-connection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [creator.status, wallet.status]);
 
   return (
     <div className="grid gap-6">
@@ -44,7 +51,7 @@ export default function SettingsPage() {
                   creator.refetch();
                 }}
               />
-              <div className="flex items-center justify-between rounded-[16px] bg-[var(--surface-muted)] p-4">
+              <div className="flex items-center justify-between rounded-[10px] bg-[var(--surface-muted)] p-4">
                 <span className="text-sm text-[var(--muted)]">Sign out of this device.</span>
                 <button type="button" onClick={() => logout()} className="button button-secondary text-sm">
                   <LogOut size={15} aria-hidden="true" /> Sign out
@@ -70,9 +77,18 @@ export default function SettingsPage() {
           </Card>
 
           {/* Payout connection */}
-          <Card>
+          <Card id="payout-connection" className="scroll-mt-6 border-[var(--river-line)] bg-[var(--river-pale)]">
             <CardHeader
-              title="Payout connection"
+              title={
+                <span className="flex flex-wrap items-center gap-2.5">
+                  Payout connection
+                  {wallet.status === "success" && !wallet.data?.address && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--river-line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--river-deep)]">
+                      <CircleAlert size={13} aria-hidden="true" /> Action required
+                    </span>
+                  )}
+                </span>
+              }
               action={
                 <a
                   href="https://faucet.circle.com"
@@ -310,41 +326,49 @@ function WalletEditor({
 
   return (
     <div className="grid gap-4">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Connection details</span>
-        {address && <WalletStatePill verified={verified} />}
-      </div>
-
       {address ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
-          <div className="grid gap-0.5 min-w-0">
-            <span className="mono truncate text-sm">{address}</span>
-            <span className="text-xs text-[var(--muted)]">
-              {isConnected ? "Privy connection" : "External payout address"} · {networkLabel}
-            </span>
+        <div className="grid gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
+            <div className="grid min-w-0 gap-0.5">
+              <span className="mono truncate text-sm">{address}</span>
+              <span className="text-xs text-[var(--muted)]">
+                {isConnected ? "Privy connection" : "External payout address"} · {networkLabel}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <WalletStatePill verified={verified} />
+              {!isConnected && (
+                <button type="button" onClick={connect} disabled={working || !ready} className="button button-secondary text-sm disabled:opacity-50">
+                  {working ? "Confirming…" : "Use Privy connection"}
+                </button>
+              )}
+            </div>
           </div>
-          {!isConnected && (
-            <button type="button" onClick={connect} disabled={working || !ready} className="button button-secondary text-sm disabled:opacity-50">
-              {working ? "Confirming…" : "Use Privy connection"}
-            </button>
-          )}
+          <p className="text-xs text-[var(--muted)]">Article earnings are routed to this connection. Rubicon never takes custody.</p>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={connect}
-          disabled={working || !ready}
-          className="button button-primary inline-flex w-fit items-center gap-2 text-sm disabled:opacity-50"
-        >
-          <Wallet size={15} aria-hidden="true" /> {working ? "Confirming…" : "Confirm connection"}
-        </button>
+        <div className="flex flex-col gap-4 rounded-lg bg-[var(--surface-muted)] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--river-line)] bg-white text-[var(--river-deep)]">
+              <CircleAlert size={18} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="font-semibold">Receive article earnings</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">Create your secure payout connection.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={connect}
+            disabled={working || !ready}
+            className="button button-primary inline-flex shrink-0 items-center gap-2 text-sm disabled:opacity-50"
+          >
+            <Wallet size={15} aria-hidden="true" /> {working ? "Setting up…" : "Set up payouts"}
+          </button>
+        </div>
       )}
 
       {shownError && <p className="rounded-lg bg-[#fff1f0] px-4 py-3 text-sm text-[#8d2f2d]">{shownError}</p>}
-      <p className="rounded-lg bg-[var(--surface-muted)] px-4 py-3 text-xs leading-5 text-[var(--muted)]">
-        Payments for your articles are routed through this Privy-secured payout connection. Rubicon never takes custody
-        of your funds.
-      </p>
     </div>
   );
 }
@@ -369,7 +393,7 @@ function DeveloperInfo({ creatorId, privyId }: { creatorId: string; privyId: str
 
 function DevRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[160px_1fr] items-baseline gap-4 rounded-[14px] px-3 py-2 even:bg-[var(--surface-muted)]">
+    <div className="grid grid-cols-[160px_1fr] items-baseline gap-4 rounded-[10px] px-3 py-2 even:bg-[var(--surface-muted)]">
       <span className="text-[var(--muted)]">{label}</span>
       <span className="min-w-0 break-words">{value}</span>
     </div>

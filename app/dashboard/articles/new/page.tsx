@@ -781,9 +781,12 @@ function StepPublish({
       </dl>
 
       {walletBlocksPublish && (
-        <p className="mt-4 rounded-lg bg-[#fdf6ec] px-4 py-3 text-sm text-[#7b4e12]">
-          You can save this as a draft now. Connect and verify a receiving wallet in Settings before publishing a paid article — or make it free.
-        </p>
+        <div className="mt-4 flex flex-col gap-3 rounded-lg border border-[var(--river-line)] bg-[var(--river-pale)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <p>Finish creator settings before publishing a paid article.</p>
+          <Link href="/dashboard/settings#payout-connection" className="button button-primary shrink-0 text-sm">
+            Finish creator settings <ArrowRight size={15} aria-hidden="true" />
+          </Link>
+        </div>
       )}
 
       {error && (

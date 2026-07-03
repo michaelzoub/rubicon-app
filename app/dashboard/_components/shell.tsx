@@ -21,6 +21,16 @@ import { usePrivyConfigured } from "../../providers";
 import { RubiconBrand } from "../../_components/rubicon-brand";
 import { OnboardingEntryScreen } from "./substack-onboarding-dialog";
 import { DashboardPageSkeleton } from "./ui";
+import {
+  hasSeenWriterObjectionPrompt,
+  markWriterObjectionPromptSeen,
+  writerHomeUrl,
+} from "./writer-objection";
+import {
+  trackWriterExitConfirmed,
+  trackWriterExitIntentOpened,
+  WriterObjectionDialog,
+} from "./writer-objection-prompt";
 
 const navSections = [
   {
@@ -70,6 +80,27 @@ function AuthGate({ children }: { children: ReactNode }) {
 }
 
 export function WriterAuthScreen({ onLogin, demo = false }: { onLogin: () => void; demo?: boolean }) {
+  const [exitOpen, setExitOpen] = useState(false);
+
+  function handleBackToRubicon() {
+    posthog.capture("writer_auth_back_clicked", {
+      page: "writer_auth",
+      section: "auth_panel",
+      user_type: "writer",
+      flow_step: "signup",
+      authenticated: false,
+    });
+    if (demo) return;
+    if (hasSeenWriterObjectionPrompt()) {
+      trackWriterExitConfirmed();
+      window.location.assign(writerHomeUrl());
+      return;
+    }
+    markWriterObjectionPromptSeen();
+    trackWriterExitIntentOpened();
+    setExitOpen(true);
+  }
+
   return (
     <div className="writer-auth-screen">
       <div className="writer-auth-card">
@@ -85,33 +116,47 @@ export function WriterAuthScreen({ onLogin, demo = false }: { onLogin: () => voi
           <div className="writer-auth-benefits mono">Private by default · 0% platform fee · Paid per word</div>
         </section>
         <section className="writer-auth-panel" aria-label="Sign in">
-          <figure className="writer-auth-quote">
-            <blockquote>
-              The <strong>creator economy</strong> is being <strong>left out</strong>, loudly and notably.
-            </blockquote>
-            <figcaption>Jack Conte, CEO of Patreon</figcaption>
-          </figure>
-          <div className="writer-auth-actions relative">
-            <button
-              type="button"
-              onClick={() => {
-                // Funnel step: unauthenticated writer opens the sign-in modal.
-                posthog.capture("sign_in_clicked", {
-                  location: "dashboard_auth_gate",
-                  current_url: window.location.pathname,
-                });
-                onLogin();
-              }}
-              className="writer-auth-button"
-            >
-              Sign in
-            </button>
-            <p className="writer-auth-privy">Powered by Privy</p>
+          <button
+            type="button"
+            className="writer-auth-back"
+            onClick={handleBackToRubicon}
+          >
+            ← Back to Rubicon
+          </button>
+          <div className="writer-auth-signin">
+            <h2>Start listing on Rubicon</h2>
+            <p className="writer-auth-signin-body">
+              Create or log in to list articles, set per-word pricing, and get paid when agents read your work.
+            </p>
+            <div className="writer-auth-actions relative">
+              <button
+                type="button"
+                onClick={() => {
+                  // Funnel step: unauthenticated writer opens the sign-in modal.
+                  posthog.capture("sign_in_clicked", {
+                    location: "dashboard_auth_gate",
+                    current_url: window.location.pathname,
+                  });
+                  posthog.capture("signup_started", {
+                    user_type: "writer",
+                    page: "writer_auth",
+                    section: "auth_panel",
+                    cta_id: "writer_auth_get_started",
+                    label: "Get started",
+                    flow_step: "signup",
+                    auth_provider: "privy",
+                  });
+                  onLogin();
+                }}
+                className="writer-auth-button"
+              >
+                Get started
+              </button>
+              <p className="writer-auth-privy">Powered by Privy</p>
             {demo && (
               <motion.span
                 aria-hidden="true"
                 className="pointer-events-none absolute left-1/2 top-7 z-20"
-                style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.35))" }}
                 initial={{ opacity: 0, x: 120, y: 70 }}
                 animate={{ opacity: 1, x: -6, y: 0, scale: [1, 1, 0.86, 1] }}
                 transition={{
@@ -125,8 +170,10 @@ export function WriterAuthScreen({ onLogin, demo = false }: { onLogin: () => voi
               </motion.span>
             )}
           </div>
+          </div>
         </section>
       </div>
+      <WriterObjectionDialog open={exitOpen} onClose={() => setExitOpen(false)} />
     </div>
   );
 }

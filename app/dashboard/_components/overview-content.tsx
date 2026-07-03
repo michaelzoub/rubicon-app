@@ -546,11 +546,11 @@ function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
         <div className="p-5">
           <EmptyState
             icon={<Wallet2 size={22} aria-hidden="true" />}
-            title="Connection not confirmed"
-            description="Confirm the secure Privy connection Rubicon uses for payouts."
+            title="Payouts not set up yet"
+            description="Set up the secure account your earnings land in. It takes one click — Rubicon handles the rest."
             action={
-              <Link href={wallet.settingsHref ?? "/dashboard/settings"} className="button button-primary text-sm">
-                Confirm connection
+              <Link href={wallet.settingsHref ?? "/dashboard/settings#payout-connection"} className="button button-primary text-sm">
+                Set up payouts
               </Link>
             }
           />

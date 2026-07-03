@@ -319,7 +319,7 @@ function OnboardingChecklistCard({
     },
     { title: "Review the sections", description: "Check the structure agents use to find relevant passages.", complete: hasSections, actions: [{ label: "Review sections", href: firstArticleHref }] },
     { title: "Choose access", description: "Keep it free or set a per-word price.", complete: hasArticles, actions: [{ label: "Set access", href: firstArticleHref }] },
-    { title: "Finish creator settings", description: "Confirm the account used for payouts.", complete: walletConnected, actions: [{ label: "Open settings", href: "/dashboard/settings" }] },
+    { title: "Finish creator settings", description: "Confirm the account used for payouts.", complete: walletConnected, actions: [{ label: "Open settings", href: "/dashboard/settings#payout-connection" }] },
     { title: "Publish", description: "Make the reviewed article available to agents.", complete: hasLive, actions: [{ label: "Review and publish", href: firstArticleHref }] },
     { title: "Track reads and earnings", description: "See paid interactions after your article is live.", complete: false, actions: [{ label: "View earnings", href: "/dashboard/earnings" }] },
   ];
@@ -345,6 +345,7 @@ function OnboardingChecklistCard({
         {steps.map((step, index) => {
           const isComplete = step.complete;
           const isActive = index === activeIndex;
+          const isCreatorSettings = step.title === "Finish creator settings";
           const marker = (
             <span className={`grid size-7 shrink-0 place-items-center rounded-full border text-xs font-semibold ${isComplete ? "border-[#9bcab4] bg-[#edf8f2] text-[#165c3e]" : isActive ? "border-[var(--river-deep)] bg-white text-[var(--river-deep)]" : "border-[var(--line)] text-[var(--muted)]"}`}>
               {isComplete ? <Check size={14} aria-hidden="true" /> : index + 1}
@@ -360,10 +361,10 @@ function OnboardingChecklistCard({
             const action = step.actions[0];
             return (
               <li key={step.title}>
-                <Link href={action.href} className={`group flex items-center gap-3 rounded-lg px-3 py-3 transition-colors ${isActive ? "bg-[var(--surface-muted)]" : "hover:bg-[var(--surface-muted)]"}`}>
+                <Link href={action.href} className={`group flex items-center gap-3 rounded-lg border px-3 py-3 transition-colors ${isCreatorSettings ? "border-[var(--river-line)] bg-[var(--river-pale)]" : isActive ? "border-transparent bg-[var(--surface-muted)]" : "border-transparent hover:bg-[var(--surface-muted)]"}`}>
                   {marker}
                   {label}
-                  <span className={`hidden items-center gap-1 text-xs font-medium sm:inline-flex ${isActive ? "text-[var(--river-deep)]" : "text-[var(--muted)] group-hover:text-[var(--ink)]"}`}>{action.label} <ArrowRight size={13} /></span>
+                  <span className={`hidden items-center gap-1 text-xs font-medium sm:inline-flex ${isActive || isCreatorSettings ? "text-[var(--river-deep)]" : "text-[var(--muted)] group-hover:text-[var(--ink)]"}`}>{action.label} <ArrowRight size={13} /></span>
                 </Link>
               </li>
             );
@@ -372,8 +373,8 @@ function OnboardingChecklistCard({
           return (
             <li key={step.title}>
               <div className={`flex flex-col gap-3 rounded-lg px-3 py-3 sm:flex-row sm:items-center ${isActive ? "bg-[var(--surface-muted)]" : ""}`}>
-                <div className="flex items-center gap-3">{marker}{label}</div>
-                <div className="flex shrink-0 flex-wrap gap-2 pl-10 sm:pl-0">
+                <div className="flex items-center gap-3 sm:flex-1">{marker}{label}</div>
+                <div className="flex shrink-0 flex-wrap gap-2 pl-10 sm:ml-auto sm:justify-end sm:pl-0">
                   {step.actions.map((action, actionIndex) => (
                     <Link key={action.href} href={action.href} className={`text-sm ${actionIndex === 0 ? "button button-primary" : "button button-secondary"}`}>
                       {action.label} <ArrowRight size={13} />
@@ -1020,7 +1021,7 @@ function LaunchMonitorCard({
           <IndicatorTile
             tone={systems[2]}
             label="Payouts"
-            value={walletAddress ? <span className="mono text-base">{shortWallet(walletAddress)}</span> : "Not connected"}
+            value={walletAddress ? <span className="mono text-base">{shortWallet(walletAddress)}</span> : "Not set up"}
             caption={
               walletAddress ? (
                 <a
@@ -1032,8 +1033,8 @@ function LaunchMonitorCard({
                   View on {ACTIVE_CHAIN.blockExplorers?.default.name ?? "explorer"} <ExternalLink size={11} aria-hidden="true" />
                 </a>
               ) : (
-                <Link href="/dashboard/settings" className="inline-flex items-center gap-1 font-medium text-[var(--river-deep)] hover:underline">
-                  Confirm connection <ArrowRight size={12} aria-hidden="true" />
+                <Link href="/dashboard/settings#payout-connection" className="inline-flex items-center gap-1 font-medium text-[var(--river-deep)] hover:underline">
+                  Set up payouts <ArrowRight size={12} aria-hidden="true" />
                 </Link>
               )
             }
