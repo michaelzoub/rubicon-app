@@ -41,6 +41,9 @@ export interface DashboardOverviewStat {
   format: (value: number) => string;
   deltaPct?: number | null;
   sparklineValues?: number[];
+  sparklineLabels?: string[];
+  sparklineMetricLabel?: string;
+  sparklineDetails?: string[];
 }
 
 export interface DashboardOverviewPaymentRow {
@@ -143,15 +146,26 @@ export function DashboardOverviewContent({
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
         <div className="grid min-w-0 gap-3">
-          <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {stats.map((stat, index) => (
-              <Reveal key={stat.label} delay={index * 0.035} className="h-full">
+              <Reveal
+                key={stat.label}
+                delay={index * 0.035}
+                className="relative h-full hover:z-40 focus-within:z-40"
+              >
                 <StatTile
                   label={stat.label}
                   value={<CountUp value={stat.value} format={stat.format} />}
                   hint={stat.deltaPct !== undefined ? <DeltaHint pct={stat.deltaPct} /> : undefined}
                   sparkline={stat.sparklineValues && stat.sparklineValues.length > 1 ? (
-                    <Sparkline values={stat.sparklineValues} height={32} />
+                    <Sparkline
+                      values={stat.sparklineValues}
+                      labels={stat.sparklineLabels}
+                      metricLabel={stat.sparklineMetricLabel ?? stat.label}
+                      details={stat.sparklineDetails}
+                      formatValue={stat.format}
+                      height={32}
+                    />
                   ) : undefined}
                 />
               </Reveal>
@@ -222,8 +236,8 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
         {/* main column */}
         <div className="grid min-w-0 gap-3">
           {/* stat tiles */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
               <Card key={i} className="grid min-h-[108px] content-between gap-6 p-4">
                 <Skeleton className="h-3.5 w-20" />
                 <Skeleton className="h-7 w-28" />

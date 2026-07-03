@@ -131,19 +131,27 @@ export default function OverviewPage() {
       },
       activityCalendar: buildActivityCalendar(activity.data ?? []),
       stats: [
-        { label: "Total earnings", value: totalEarned, format: formatUsdDisplay, deltaPct: weeklyDeltas.earnings, sparklineValues: trendBars.map((b) => b.value) },
-        { label: "Words read", value: earnings.data.wordsPaidFor ?? 0, format: formatInt, deltaPct: weeklyDeltas.words, sparklineValues: wordsTrendBars.map((b) => b.value) },
-        { label: "Live articles", value: earnings.data.liveArticles ?? 0, format: formatInt },
         {
-          label: "Payout wallet",
-          value: nativeBalance.status === "success" && nativeBalance.value ? Number(nativeBalance.value) : 0,
-          format: (v) => {
-            if (nativeBalance.status === "loading") return "Loading...";
-            if (nativeBalance.status === "error") return "Unavailable";
-            if (nativeBalance.status !== "success" || !nativeBalance.value) return "0";
-            return `${formatBalance(nativeBalance.value)} ${nativeBalance.symbol}`;
-          },
+          label: "Total earnings",
+          value: totalEarned,
+          format: formatUsdDisplay,
+          deltaPct: weeklyDeltas.earnings,
+          sparklineValues: trendBars.map((b) => b.value),
+          sparklineLabels: trendBars.map((b) => b.fullLabel),
+          sparklineMetricLabel: "Earnings that day",
+          sparklineDetails: trendBars.map((b) => `${b.detail ?? "0 words"} read`),
         },
+        {
+          label: "Words read",
+          value: earnings.data.wordsPaidFor ?? 0,
+          format: formatInt,
+          deltaPct: weeklyDeltas.words,
+          sparklineValues: wordsTrendBars.map((b) => b.value),
+          sparklineLabels: wordsTrendBars.map((b) => b.fullLabel),
+          sparklineMetricLabel: "Words read that day",
+          sparklineDetails: wordsTrendBars.map((b) => `${b.detail ?? formatUsdNumber(0)} earned`),
+        },
+        { label: "Live articles", value: earnings.data.liveArticles ?? 0, format: formatInt },
       ],
       trendBars,
       topArticles: [...articleList]

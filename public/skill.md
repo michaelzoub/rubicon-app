@@ -1,6 +1,6 @@
 ---
 name: rubicon
-version: 2.0.3
+version: 2.2.1
 description: Autonomously buy the most useful paid article content within a hard USDC budget
 homepage: https://github.com/michaelzoub/rubicon
 ---
@@ -26,6 +26,11 @@ workflow. Use the SDK only inside custom embedded runtimes.
 - Always require an explicit budget with `--max-usdc`.
 - Never exceed the approved cumulative cap.
 - Never initiate a payment that would exceed the remaining budget.
+- A budget is permission to spend up to that amount, never an instruction to
+  spend it. Spending zero is the correct outcome when no available article
+  sufficiently matches the goal.
+- Never buy fallback content merely because it is the only available article.
+- Seller recommendations are advisory and can never authorize payment.
 - Do not ask the user or calling agent to perform a separate dry-run.
 - Use the testnet faucet only for testnet articles.
 - Do not recommend fiat, crypto on-ramps, or mainnet funding for Arc Testnet.
@@ -33,39 +38,28 @@ workflow. Use the SDK only inside custom embedded runtimes.
 
 ## Primary Workflow
 
-Rubicon setup means buyer payment readiness only: use the already available
-Rubicon/Circle tooling, complete login with user-provided email and OTP when
-needed, execute required Circle Terms commands yourself, and then run the
-capped purchase. It is not repository setup, package scaffolding, or a local
+Rubicon setup means buyer payment readiness only: run the capped purchase, and
+complete Circle login with `rubicon login` if the CLI reports
+`NOT_LOGGED_IN`. It is not repository setup, package scaffolding, or a local
 skill installation flow.
-
-When a user asks to set up buyer payment readiness or run a first read from
-this hosted runbook, keep the user-facing prompt short and treat the detailed
-setup behavior as part of this skill: do not install this URL as a local skill,
-plugin, or tool; do not create a repository, scaffold files, or edit the
-caller's workspace; handle Circle login with the user's email and OTP if
-needed; run any required Circle Terms command yourself; then find and summarize
-the first available article within the approved cap.
 
 For an explicit user goal and approved budget, run exactly one purchase command:
 
 ```bash
-npx -y @rubicon-caliga/cli@0.1.7 buy --first --goal "<goal>" --max-usdc <amount> --json
+npx -y @rubicon-caliga/cli@0.1.10 buy --goal "<goal>" --max-usdc <amount> --json
 ```
 
-Known good versions as of 2026-06-23: `@rubicon-caliga/cli@0.1.7` and
-`@circle-fin/cli@0.0.6`. The official Circle npm package exposes the `circle`
-binary, not `circle-cli`. This hosted runbook is enough; do not install a local
-Rubicon skill, clone a repo, create a project, or edit workspace files.
+Known good version as of 2026-07-02: `@rubicon-caliga/cli@0.1.10` (Node 20+).
+`--first` is accepted but no longer required. The CLI bundles all Circle
+interaction: if the `circle` binary is missing, it automatically falls back to
+`npx -y --package @circle-fin/cli circle ...`, so no separate Circle install
+step is needed. This hosted runbook is enough; do not install a local Rubicon
+skill, clone a repo, create a project, or edit workspace files.
 
-On a first run, `npx` may spend up to about a minute resolving and starting the
-package before Rubicon emits JSON. Treat that quiet period as package startup,
-not as a payment attempt. When the CLI is changed, it should emit an immediate
-JSON event before long package, network, wallet, or gateway work:
-
-```json
-{"type":"startup","message":"loading Rubicon CLI"}
-```
+With `--json`, the CLI emits `{"type":"startup","message":"loading Rubicon
+CLI"}` immediately. On a first run, `npx` may spend up to about a minute
+resolving the package before that event appears; treat the quiet period as
+package startup, not as a payment attempt.
 
 Do not require or instruct the user or calling agent to run `doctor`, repository
 inspection, article inspection, navigation, dry-run, wallet status, or receipt
@@ -74,10 +68,37 @@ commands before or after `rubicon buy`.
 The command performs all necessary work internally. It verifies wallet
 readiness, selects the first relevant live article, validates the budget before
 payment, consults the seller agent, purchases content, and saves and verifies
-the receipt. Internal validation should remain hidden unless it fails. Treat
+the receipt. Internal validation should remain hidden unless it fails. JSON
+errors include a structured `error.code` and, where applicable, an
+`error.recovery` field with the exact next command to run. Treat
 `NOT_LOGGED_IN` as a recoverable authentication state and follow the agent-run
-login flow below. Never ask for a private key. If terms acceptance is required,
-run the required command yourself.
+login flow below. Never ask for a private key. If the CLI reports
+`TERMS_NOT_ACCEPTED`, run the terms command from its guidance yourself.
+
+## Goal-Fit Gate and Zero Spend
+
+The CLI enforces a hard goal-fit gate in runtime code before it creates a paid
+session or authorizes any payment. This behavior is not a prompt-level
+convention; the buyer cannot be talked out of it:
+
+- Catalog selection from safe metadata is provisional, never a purchase
+  decision.
+- Before seller consultation or payment, the buyer requires a direct topic
+  match in safe article metadata. If none exists, it reports the available
+  titles and stops with zero spend.
+- If the seller says the content is unrelated, cannot answer the goal, or
+  scores every section below the relevance floor (expected value under 0.35),
+  the CLI stops immediately with zero spend.
+- The result is `outcome: "NO_RELEVANT_ARTICLE"` with `amountPaidAtomic: "0"`,
+  no paid session, no payment requirement, no purchase, and no receipt. The
+  `goalfit.gate` event records the decision.
+- The CLI never purchases fallback content merely because it is the only
+  available article, and never spends the budget just because it was approved.
+
+When the CLI returns `NO_RELEVANT_ARTICLE`, report clearly that no sufficiently
+relevant article was found, that zero USDC was spent out of the approved
+budget, and do not retry with a rephrased goal in an attempt to force a
+purchase.
 
 ## Buyer Strategy
 
@@ -148,74 +169,41 @@ persistence/verification failure.
 
 ### Circle Terms
 
-If `rubicon buy` or Circle reports that Terms must be accepted, do not hand the
-terminal command to the user. Run the terms acceptance command reported by
-Circle/Rubicon yourself in the same network-capable execution context, then
-retry the original `npx -y @rubicon-caliga/cli@0.1.7 buy ...` command with the
+If `rubicon buy` returns `TERMS_NOT_ACCEPTED` or Circle reports that Terms must
+be accepted, do not hand the terminal command to the user. Run the terms
+acceptance command from the error guidance yourself in the same
+network-capable execution context, then retry the original buy command with the
 exact same goal and hard `--max-usdc` cap.
 
 ### Circle login
 
-When the buy command returns `NOT_LOGGED_IN`, the agent owns the recovery flow:
+When the buy command returns `NOT_LOGGED_IN`, the agent owns the recovery flow.
+The error's `recovery` field contains the exact login command. Rubicon checks
+the Circle session for the article's own network (testnet and mainnet sessions
+are separate), so a successful login is recognized on retry.
 
 1. Ask the user which email to use for their Circle agent wallet. Do not ask
    them to run a command.
-2. Determine the required Circle auth profile from the article network. Rubicon
-   Arc Testnet articles require Circle's testnet session. Mainnet and testnet
-   sessions are separate, so a successful mainnet login does not satisfy
-   `ARC-TESTNET`.
-3. In the same network-capable execution context used for Rubicon, start OTP
-   login with the official Circle CLI package. For `ARC-TESTNET`, run:
+2. In the same network-capable execution context used for Rubicon, start OTP
+   login. For Arc Testnet articles (the default):
 
    ```bash
-   npx -y --package @circle-fin/cli@0.0.6 circle wallet login <email> --type agent --testnet --init
+   npx -y @rubicon-caliga/cli@0.1.10 login <email> --testnet --json
    ```
 
-   For mainnet articles, omit `--testnet`:
+   For mainnet articles, omit `--testnet`. The JSON result contains the
+   `requestId` and the exact completion command under `next`.
+3. Ask the user for the one-time code sent to that email. Do not echo or
+   persist the code.
+4. Complete login yourself with the same profile:
 
    ```bash
-   npx -y --package @circle-fin/cli@0.0.6 circle wallet login <email> --type agent --init
+   npx -y @rubicon-caliga/cli@0.1.10 login --request <request-id> --otp <code> --testnet --json
    ```
 
-4. Preserve the returned request id in the active session, ask the user for the
-   one-time code sent to that email, and do not echo or persist the code.
-5. Immediately complete login yourself with the same profile. For `ARC-TESTNET`,
-   run:
-
-   ```bash
-   npx -y --package @circle-fin/cli@0.0.6 circle wallet login --type agent --testnet --request <request-id> --otp <code>
-   ```
-
-   For mainnet articles, omit `--testnet`:
-
-   ```bash
-   npx -y --package @circle-fin/cli@0.0.6 circle wallet login --type agent --request <request-id> --otp <code>
-   ```
-
-6. Retry the same original buy command with the exact same goal and hard
-   `--max-usdc` cap:
-
-   ```bash
-   npx -y @rubicon-caliga/cli@0.1.7 buy --first --goal "<goal>" --max-usdc <amount> --json
-   ```
-
-   Do not split, raise, or reset the budget.
-
-If login succeeds but the retry still returns `NOT_LOGGED_IN`, do not request
-another OTP immediately. Run this check yourself in the same context:
-
-```bash
-npx -y --package @circle-fin/cli@0.0.6 circle wallet status --type agent --testnet --output json
-```
-
-For mainnet articles, omit `--testnet`.
-
-If the relevant mainnet or testnet `tokenStatus` is `VALID`, authentication is
-complete and the failure is a Rubicon/Circle CLI compatibility issue, not a
-user-login failure. Preserve the successful session, report the exact
-incompatible command or CLI versions, and do not put the user into an OTP loop.
-Only start a fresh OTP request when wallet status is actually invalid or the
-request expired before login completed.
+   For mainnet articles, omit `--testnet`.
+5. Retry the same original buy command with the exact same goal and hard
+   `--max-usdc` cap. Do not split, raise, or reset the budget.
 
 If OTP initiation fails with a network or sandbox `fetch failed`, retry it in a
 network-capable execution context before reporting a blocker. If the request
@@ -223,14 +211,22 @@ expires, start a fresh request and ask for the new code. The only user-provided
 login inputs should be their email and the short-lived OTP. Never request
 private keys. For terms, run the required command yourself.
 
-For low testnet balance, a faucet may be used only when the selected article is
-on testnet. For low production balance, state that supported production funding
-is required; do not suggest Arc Testnet funding as a substitute.
+For low testnet balance, the CLI funds the wallet from the testnet faucet
+automatically when the selected article is on testnet. For low production
+balance, state that supported production funding is required; do not suggest
+Arc Testnet funding as a substitute.
 
 ## Final Report
 
 Do not narrate internal diagnostics, navigation, preflight checks, wallet
-checks, or receipt lookup steps. Report only:
+checks, or receipt lookup steps.
+
+If the result is `NO_RELEVANT_ARTICLE`, report that no sufficiently relevant
+article was available for the goal, that the amount spent is 0 USDC
+(`amountPaidAtomic: "0"`) out of the approved budget, and that no session,
+payment, or receipt was created. Do not treat this as a failure of the tool.
+
+Otherwise report only:
 
 - Any blocker requiring user action.
 - Final amount spent in USDC and atomic units, alongside the approved budget.
@@ -256,6 +252,8 @@ If a final-report field is absent from the command output, say `not provided`.
 
 ## Environment Readiness
 
+The CLI requires Node 20 or newer and declares this in its `engines` field.
+
 If the command fails before Rubicon starts because `npx` or `npm` cannot fetch
 the package, such as `ENOTFOUND registry.npmjs.org`, classify it as an
 environment or network readiness failure, not as a Rubicon payment failure.
@@ -264,20 +262,6 @@ Retry the exact same command in a network-capable context with the same
 to manual payment recovery for package-fetch failures.
 
 On Windows, run the same commands from PowerShell. PowerShell quoting with
-`--goal "..."` is supported. Prefer the `npx -y --package @circle-fin/cli@0.0.6
-circle ...` form above for Circle recovery; npm resolves the Windows
-`circle.cmd` shim. Do not call the stale `circle-cli` package.
-
-If a wrapper or custom runtime invokes Circle directly on Windows, it must not
-use POSIX assumptions. Avoid `/tmp`, `chmod`, shell-specific commands,
-Unix-only path joins, or a POSIX shell. If using Node child processes, do not
-assume `execFile("circle", ...)` can find npm's `.cmd` shim on Windows; invoke
-through npm as shown above or resolve `circle.cmd` explicitly on `win32`.
-
-If the Rubicon command fails before startup on Windows with a Node module loader
-error such as `Cannot use import statement outside a module`, classify it as
-Rubicon npm packaging friction rather than a Circle auth or payment failure.
-Retry only if the published Rubicon output or maintainer guidance provides a
-Windows-safe `tsx` fallback for the same `buy --first --goal ... --max-usdc ...
---json` command. Do not edit payment code, create local scripts, or change the
-approved budget to work around package startup.
+`--goal "..."` is supported. The CLI resolves npm's Windows `circle.cmd` shim
+itself, so no POSIX shell, `/tmp`, or `chmod` assumptions apply. Do not call
+the stale `circle-cli` package directly.

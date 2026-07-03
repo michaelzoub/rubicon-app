@@ -1,18 +1,18 @@
 "use client";
 
 /**
- * Lightweight, dependency-free data-viz primitives for the dashboard.
+ * Lightweight data-viz primitives for the dashboard.
  *
- * Everything here is pure SVG / flexbox animated with framer-motion (already a
- * project dependency), so there's no chart library to pull in. All visuals use
- * the dashboard theme tokens so they stay on-brand in light mode.
+ * Interactive charts use Recharts while small transitions use framer-motion.
+ * All visuals use the dashboard theme tokens so they stay on-brand in light mode.
  *
  * Motion respects `prefers-reduced-motion`: when the user opts out we render the
  * final state immediately instead of animating.
  */
 
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Line, LineChart, ResponsiveContainer, Tooltip } from "recharts";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /* ---------- animated number ---------- */
 
@@ -266,92 +266,77 @@ export function Donut({
 /* ---------- sparkline ---------- */
 
 /**
- * Smooth SVG sparkline drawn at the bottom of a stat card. Uses a monotone
- * cubic interpolation so the curve never overshoots the data — important when
- * the series has sharp jumps (e.g. a single large payment).
+ * Compact Recharts line chart for stat cards. Hovering or focusing the chart
+ * reveals the value and its period in a flat, border-led tooltip.
  */
 export function Sparkline({
   values,
+  labels,
+  metricLabel,
+  details,
+  formatValue = (value) => String(value),
   color = "var(--ink)",
   height = 40,
   strokeWidth = 1.5,
 }: {
   values: number[];
+  labels?: string[];
+  metricLabel: string;
+  details?: string[];
+  formatValue?: (value: number) => string;
   color?: string;
   height?: number;
   strokeWidth?: number;
 }) {
   const reduce = useReducedMotion();
-  const gradientId = useId();
   if (values.length < 2) return null;
 
-  const max = Math.max(...values, 0);
-  const min = Math.min(...values, 0);
-  const range = max - min || 1;
-  const w = 100;
-  const pad = 2;
-
-  const points = values.map((v, i) => ({
-    x: pad + (i / (values.length - 1)) * (w - pad * 2),
-    y: height - pad - ((v - min) / range) * (height - pad * 2),
+  const data = values.map((value, index) => ({
+    value,
+    label: labels?.[index] ?? `Period ${index + 1}`,
+    detail: details?.[index],
   }));
 
-  const d = points
-    .map((p, i) => {
-      if (i === 0) return `M ${p.x} ${p.y}`;
-      const prev = points[i - 1];
-      const cpx1 = prev.x + (p.x - prev.x) / 3;
-      const cpx2 = prev.x + (2 * (p.x - prev.x)) / 3;
-      return `C ${cpx1} ${prev.y}, ${cpx2} ${p.y}, ${p.x} ${p.y}`;
-    })
-    .join(" ");
-
-  const areaD = `${d} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
-
-  const last = points[points.length - 1];
-
   return (
-    <div className="relative mt-auto w-full" style={{ height }}>
-      <svg
-        viewBox={`0 0 ${w} ${height}`}
-        preserveAspectRatio="none"
-        className="absolute inset-0 h-full w-full"
-      >
-        <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.08} />
-          <stop offset="100%" stopColor={color} stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <motion.path
-        d={areaD}
-        fill={`url(#${gradientId})`}
-        initial={reduce ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-      />
-      <motion.path
-        d={d}
-        fill="none"
-        stroke={color}
-        strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        initial={reduce ? false : { pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-      />
-      </svg>
-      {/* "Now" marker: HTML overlay (not in-SVG) so preserveAspectRatio="none"
-          can't stretch it. Ringed in surface so it reads over the fill. */}
-      <motion.span
-        aria-hidden="true"
-        className="absolute h-[5px] w-[5px] -translate-x-1/2 -translate-y-1/2 rounded-full ring-2 ring-[var(--card,#fff)]"
-        style={{ left: `${(last.x / w) * 100}%`, top: `${(last.y / height) * 100}%`, background: color }}
-        initial={reduce ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3, delay: reduce ? 0 : 0.35, ease: [0.23, 1, 0.32, 1] }}
-      />
+    <div className="relative z-10 mt-auto w-full min-w-0 overflow-visible" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 4, right: 3, bottom: 4, left: 3 }} accessibilityLayer>
+          <Tooltip
+            allowEscapeViewBox={{ x: true, y: true }}
+            cursor={{ stroke: "var(--line)", strokeWidth: 1 }}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const value = Number(payload[0].value ?? 0);
+              const point = payload[0].payload as { label?: string; detail?: string } | undefined;
+              return (
+                <div className="min-w-44 rounded-lg border border-[var(--line)] bg-white px-3 py-2.5">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <span className="text-[0.68rem] text-[var(--muted)]">Date</span>
+                    <span className="text-xs font-medium text-[var(--ink)]">{point?.label ?? "Unknown date"}</span>
+                  </div>
+                  <div className="mt-1.5 flex items-baseline justify-between gap-4 border-t border-[var(--line)] pt-1.5">
+                    <span className="text-[0.68rem] text-[var(--muted)]">{metricLabel}</span>
+                    <span className="text-xs font-semibold tabular-nums text-[var(--ink)]">{formatValue(value)}</span>
+                  </div>
+                  {point?.detail && <div className="mt-1.5 border-t border-[var(--line)] pt-1.5 text-right text-[0.68rem] text-[var(--muted)]">{point.detail}</div>}
+                </div>
+              );
+            }}
+            isAnimationActive={false}
+            wrapperStyle={{ outline: "none", pointerEvents: "none", zIndex: 50 }}
+          />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke={color}
+            strokeWidth={strokeWidth}
+            dot={false}
+            activeDot={{ r: 3, fill: color, stroke: "white", strokeWidth: 1.5 }}
+            isAnimationActive={!reduce}
+            animationDuration={500}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { getEmbeddedConnectedWallet, useCreateWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, Copy, KeyRound, LogOut, ShieldCheck, Trash2, Wallet } from "lucide-react";
+import { Check, ChevronDown, Copy, ExternalLink, KeyRound, LogOut, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { RECEIVING_NETWORK, RECEIVING_NETWORK_LABEL } from "@/lib/chain";
 import {
@@ -71,7 +71,19 @@ export default function SettingsPage() {
 
           {/* Payout connection */}
           <Card>
-            <CardHeader title="Payout connection" />
+            <CardHeader
+              title="Payout connection"
+              action={
+                <a
+                  href="https://faucet.circle.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="button button-secondary inline-flex items-center gap-1.5 text-sm"
+                >
+                  Get Arc testnet USDC <ExternalLink size={14} aria-hidden="true" />
+                </a>
+              }
+            />
             <div className="p-5">
               {wallet.status === "loading" && <LoadingState />}
               {wallet.status === "error" && wallet.error && <ErrorState error={wallet.error} onRetry={wallet.refetch} />}
