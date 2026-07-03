@@ -25,6 +25,22 @@ export const ARTICLE_STATE_LABELS: Record<ArticleState, string> = {
 };
 
 /**
+ * Whether agents pay to read an article or read it for free.
+ *
+ * `paid` is the default and the historical behaviour: agents are billed
+ * `pricePerWordAtomic` for every word delivered. `free` articles are delivered
+ * at no charge — no wallet or price is required to publish them, and they earn
+ * nothing. A zero price alone does NOT mean free: it means an unpriced draft.
+ * Free is only ever an explicit choice recorded here.
+ */
+export type ArticleAccessMode = "free" | "paid";
+
+export const ARTICLE_ACCESS_MODE_LABELS: Record<ArticleAccessMode, string> = {
+  free: "Free",
+  paid: "Paid",
+};
+
+/**
  * A navigable section of an article. The seller agent uses section titles to
  * guide buyer agents without revealing unpaid body text. Word counts come from
  * the gateway's tokenizer so the UI never diverges from billed usage.
@@ -89,9 +105,11 @@ export interface Article {
   title: string;
   author: string;
   state: ArticleState;
+  /** Whether agents pay to read this article. Defaults to "paid". */
+  accessMode: ArticleAccessMode;
   /** Import provenance, or null for articles created by hand. */
   importMeta: ArticleImportMeta | null;
-  /** Price per single word, in atomic USDC units. */
+  /** Price per single word, in atomic USDC units. Ignored when accessMode is "free". */
   pricePerWordAtomic: string;
   /** Optional cap on the total an agent can be charged for one article. */
   maxArticlePriceAtomic: string | null;
@@ -189,7 +207,9 @@ export interface CreateArticleInput {
   body: string;
   /** Optional creator overrides for parsed section titles/order/exclusion. */
   sections?: ArticleSectionInput[];
-  /** Price per word in atomic USDC units. */
+  /** Whether agents pay to read. Defaults to "paid" when omitted. */
+  accessMode?: ArticleAccessMode;
+  /** Price per word in atomic USDC units. Ignored when accessMode is "free". */
   pricePerWordAtomic: string;
   maxArticlePriceAtomic?: string | null;
   sellerAgentConfig?: Record<string, unknown> | null;
@@ -198,7 +218,7 @@ export interface CreateArticleInput {
 }
 
 export type UpdateArticleInput = Partial<
-  Pick<CreateArticleInput, "title" | "author" | "body" | "sections" | "pricePerWordAtomic" | "maxArticlePriceAtomic" | "sellerAgentConfig">
+  Pick<CreateArticleInput, "title" | "author" | "body" | "sections" | "accessMode" | "pricePerWordAtomic" | "maxArticlePriceAtomic" | "sellerAgentConfig">
 >;
 
 export interface UpdateCreatorInput {

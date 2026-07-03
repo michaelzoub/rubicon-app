@@ -21,7 +21,7 @@ import {
   usdToAtomic,
 } from "@/lib/rubicon/pricing";
 import { parseSections } from "@/lib/rubicon/sections";
-import type { ArticleSourceInput, ArticleSectionInput } from "@/lib/rubicon/types";
+import type { ArticleAccessMode, ArticleSourceInput, ArticleSectionInput } from "@/lib/rubicon/types";
 import { isStolenXContent, normalizeHandle } from "@/lib/articles/ownership";
 import { MarkdownEditor } from "../../_components/markdown-editor";
 import { Card, formatDate, PageHeader, SafetyWarning, shortWallet, WalletStatePill } from "../../_components/ui";
@@ -64,6 +64,7 @@ export default function NewArticlePage() {
   const lastParsed = useRef<string>("");
 
   const [pricePerWord, setPricePerWord] = useState("");
+  const [accessMode, setAccessMode] = useState<ArticleAccessMode>("paid");
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [source, setSource] = useState<ImportedSource | null>(null);
@@ -134,8 +135,9 @@ export default function NewArticlePage() {
     </SafetyWarning>
   ) : null;
 
+  const isFree = accessMode === "free";
   const includedWords = sections.reduce((sum, s) => sum + s.wordCount, 0);
-  const atomicPerWord = pricePerWord ? usdToAtomic(Number(pricePerWord)) : "0";
+  const atomicPerWord = isFree ? "0" : pricePerWord ? usdToAtomic(Number(pricePerWord)) : "0";
   const estFullPrice = atomicForWords(atomicPerWord, includedWords);
 
   function buildInput() {
@@ -148,6 +150,7 @@ export default function NewArticlePage() {
       author: author.trim(),
       body: content,
       sections: sectionInput,
+      accessMode,
       pricePerWordAtomic: atomicPerWord,
       maxArticlePriceAtomic: null,
       source: source
@@ -233,10 +236,12 @@ export default function NewArticlePage() {
 
       {step === 2 && (
         <StepPricing
+          accessMode={accessMode}
           pricePerWord={pricePerWord}
           atomicPerWord={atomicPerWord}
           includedWords={includedWords}
           estFullPrice={estFullPrice}
+          onAccessMode={setAccessMode}
           onPrice={setPricePerWord}
           onBack={() => setStep(1)}
           onNext={() => setStep(3)}
@@ -246,6 +251,7 @@ export default function NewArticlePage() {
       {step === 3 && (
         <StepPublish
           title={title}
+          accessMode={accessMode}
           includedWords={includedWords}
           sectionCount={sections.length}
           atomicPerWord={atomicPerWord}
@@ -573,38 +579,62 @@ function StepReviewSections({
 }
 
 function StepPricing({
+  accessMode,
   pricePerWord,
   atomicPerWord,
   includedWords,
   estFullPrice,
+  onAccessMode,
   onPrice,
   onBack,
   onNext,
 }: {
+  accessMode: ArticleAccessMode;
   pricePerWord: string;
   atomicPerWord: string;
   includedWords: number;
   estFullPrice: string;
+  onAccessMode: (v: ArticleAccessMode) => void;
   onPrice: (v: string) => void;
   onBack: () => void;
   onNext: () => void;
 }) {
-  const valid = Number(atomicPerWord) > 0;
+  const isFree = accessMode === "free";
+  // Free articles need no price; paid articles need a positive one.
+  const valid = isFree || Number(atomicPerWord) > 0;
   return (
     <Card className="p-6">
-      <h2 className="text-lg font-semibold">Choose pricing</h2>
-      <p className="mt-1 text-sm text-[var(--muted)]">Set what agents pay to read. You earn for exactly the words they read.</p>
+      <h2 className="text-lg font-semibold">Choose access</h2>
+      <p className="mt-1 text-sm text-[var(--muted)]">Offer it free to any agent, or charge for exactly the words they read.</p>
+
+      <div className="mt-5 grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Article access">
+        <AccessOption
+          selected={!isFree}
+          onSelect={() => onAccessMode("paid")}
+          title="Paid"
+          description="Agents pay per word. Requires a verified wallet to publish."
+          testid="access-paid"
+        />
+        <AccessOption
+          selected={isFree}
+          onSelect={() => onAccessMode("free")}
+          title="Free"
+          description="Any agent can read it at no charge. No wallet needed."
+          testid="access-free"
+        />
+      </div>
 
       <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
         <div className="grid gap-5">
           <Field label="Price per word" hint="Agents pay only for the words they reveal. You can update pricing anytime.">
-            <div className="flex h-11 items-center gap-2 rounded-lg bg-[var(--surface-muted)] px-3 transition focus-within:bg-white focus-within:ring-2 focus-within:ring-[var(--river-line)]">
+            <div className={`flex h-11 items-center gap-2 rounded-lg bg-[var(--surface-muted)] px-3 transition focus-within:bg-white focus-within:ring-2 focus-within:ring-[var(--river-line)] ${isFree ? "opacity-40" : ""}`}>
               <span className="shrink-0 text-[var(--muted)]">$</span>
               <input
-                value={pricePerWord}
+                value={isFree ? "" : pricePerWord}
                 onChange={(e) => onPrice(e.target.value.replace(/[^0-9.]/g, ""))}
                 inputMode="decimal"
-                placeholder="0.0001"
+                placeholder={isFree ? "Free" : "0.0001"}
+                disabled={isFree}
                 className="h-full min-w-0 flex-1 border-0 bg-transparent outline-none placeholder:text-[var(--muted)]"
               />
             </div>
@@ -612,16 +642,28 @@ function StepPricing({
         </div>
 
         <div className="rounded-xl bg-[var(--surface-muted)] p-5">
-          <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Pricing preview</div>
-          <dl className="mt-4 grid gap-3 text-sm">
-            <Row term="Price per word" value={formatUsd(atomicPerWord)} />
-            <Row term="Estimated full-article price" value={`${formatUsd(estFullPrice)}`} />
-            <Row term="Earnings for 100 words" value={formatUsd(atomicForWords(atomicPerWord, 100))} />
-            <Row term="Earnings for 1,000 words" value={formatUsd(atomicForWords(atomicPerWord, 1000))} />
-            <Row term="Rubicon platform fee" value="0%" />
-          </dl>
+          <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+            {isFree ? "Access preview" : "Pricing preview"}
+          </div>
+          {isFree ? (
+            <dl className="mt-4 grid gap-3 text-sm">
+              <Row term="Access" value="Free for all agents" />
+              <Row term="Price per word" value="$0.00" />
+              <Row term="Earnings" value="—" />
+            </dl>
+          ) : (
+            <dl className="mt-4 grid gap-3 text-sm">
+              <Row term="Price per word" value={formatUsd(atomicPerWord)} />
+              <Row term="Estimated full-article price" value={`${formatUsd(estFullPrice)}`} />
+              <Row term="Earnings for 100 words" value={formatUsd(atomicForWords(atomicPerWord, 100))} />
+              <Row term="Earnings for 1,000 words" value={formatUsd(atomicForWords(atomicPerWord, 1000))} />
+              <Row term="Rubicon platform fee" value="0%" />
+            </dl>
+          )}
           <p className="mt-4 rounded-[14px] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
-            Estimates use a preview word count. Billing always reflects the exact words an agent reads, measured by Rubicon.
+            {isFree
+              ? "Free articles are delivered in full to any agent and earn nothing. You can switch to paid later."
+              : "Estimates use a preview word count. Billing always reflects the exact words an agent reads, measured by Rubicon."}
           </p>
         </div>
       </div>
@@ -638,8 +680,41 @@ function StepPricing({
   );
 }
 
+function AccessOption({
+  selected,
+  onSelect,
+  title,
+  description,
+  testid,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  title: string;
+  description: string;
+  testid: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      data-testid={testid}
+      onClick={onSelect}
+      className={`grid gap-1 rounded-xl border p-4 text-left transition ${
+        selected
+          ? "border-[var(--river)] bg-[var(--river-pale)]"
+          : "border-[var(--line)] bg-[var(--surface-muted)] hover:border-[var(--river-line)]"
+      }`}
+    >
+      <span className="text-sm font-semibold">{title}</span>
+      <span className="text-xs leading-5 text-[var(--muted)]">{description}</span>
+    </button>
+  );
+}
+
 function StepPublish({
   title,
+  accessMode,
   includedWords,
   sectionCount,
   atomicPerWord,
@@ -656,6 +731,7 @@ function StepPublish({
   onPublish,
 }: {
   title: string;
+  accessMode: ArticleAccessMode;
   includedWords: number;
   sectionCount: number;
   atomicPerWord: string;
@@ -671,7 +747,10 @@ function StepPublish({
   onSaveDraft: () => void;
   onPublish: () => void;
 }) {
-  const noWallet = !walletAddress;
+  const isFree = accessMode === "free";
+  // Only paid articles need a verified wallet to publish; free articles pay out
+  // nothing, so a missing/unverified wallet never blocks them.
+  const walletBlocksPublish = !isFree && !walletVerified;
   return (
     <Card className="p-6">
       <h2 className="text-lg font-semibold">Review and publish</h2>
@@ -681,26 +760,29 @@ function StepPublish({
 
       <dl className="mt-5 grid gap-3 rounded-xl bg-[var(--surface-muted)] p-5 text-sm">
         <Row term="Article title" value={title || "Untitled"} />
+        <Row term="Access" value={isFree ? "Free for all agents" : "Paid per word"} />
         <Row term="Word count" value={includedWords.toLocaleString()} />
         <Row term="Sections" value={sectionCount.toLocaleString()} />
-        <Row term="Price per word" value={formatUsd(atomicPerWord)} />
-        <Row term="Estimated full price" value={formatUsd(estFullPrice)} />
-        <Row
-          term="Receiving wallet"
-          value={
-            <span className="flex items-center gap-2">
-              <span className="mono">{shortWallet(walletAddress)}</span>
-              {walletAddress && <WalletStatePill verified={walletVerified} />}
-            </span>
-          }
-        />
+        {!isFree && <Row term="Price per word" value={formatUsd(atomicPerWord)} />}
+        {!isFree && <Row term="Estimated full price" value={formatUsd(estFullPrice)} />}
+        {!isFree && (
+          <Row
+            term="Receiving wallet"
+            value={
+              <span className="flex items-center gap-2">
+                <span className="mono">{shortWallet(walletAddress)}</span>
+                {walletAddress && <WalletStatePill verified={walletVerified} />}
+              </span>
+            }
+          />
+        )}
         <Row term="Platform fee" value="0%" />
         <Row term="Article status" value="Draft until published" />
       </dl>
 
-      {noWallet && (
+      {walletBlocksPublish && (
         <p className="mt-4 rounded-lg bg-[#fdf6ec] px-4 py-3 text-sm text-[#7b4e12]">
-          You can save this as a draft now. Connect a receiving wallet in Settings before publishing so payments have somewhere to go.
+          You can save this as a draft now. Connect and verify a receiving wallet in Settings before publishing a paid article — or make it free.
         </p>
       )}
 
@@ -723,13 +805,15 @@ function StepPublish({
           <button type="button" onClick={onSaveDraft} disabled={submitting || ownershipMismatch} className="button button-secondary disabled:opacity-50">
             Save draft
           </button>
-          <button type="button" onClick={onPublish} disabled={submitting || noWallet || ownershipMismatch} className="button button-primary disabled:opacity-50">
+          <button type="button" onClick={onPublish} disabled={submitting || walletBlocksPublish || ownershipMismatch} className="button button-primary disabled:opacity-50">
             {submitting ? "Publishing…" : "Publish article"}
           </button>
         </div>
       </div>
       <p className="mt-3 text-right text-xs text-[var(--muted)]">
-        Agents can preview metadata, but paid content remains hidden until purchased.
+        {isFree
+          ? "Free articles are delivered in full to any agent that asks."
+          : "Agents can preview metadata, but paid content remains hidden until purchased."}
       </p>
     </Card>
   );

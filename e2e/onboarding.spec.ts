@@ -171,12 +171,20 @@ test.describe("Substack onboarding (agent-readable UI)", () => {
     await expect(page.getByTestId("go-live-button")).toContainText("Go live with 1 post");
 
     const priceInput = page.getByTestId("price-input");
+    const freeAccess = page.getByTestId("free-access-checkbox");
+    await freeAccess.check();
+    await expect(priceInput).toBeDisabled();
+    await expect(page.getByLabel("Price per word slider")).toBeDisabled();
+    await freeAccess.uncheck();
+    await priceInput.fill("1.25");
+    await priceInput.blur();
+    await expect(priceInput).toHaveValue("1.2500");
     await priceInput.fill("0.002");
     await priceInput.blur();
     // The readout snaps to canonical formatting once editing ends, proving the
     // number input and the slider share state.
     await expect(priceInput).toHaveValue("0.0020");
-    await expect(page.getByLabel("Price per word in USDC").first()).toBeVisible();
+    await expect(page.getByLabel("Price per word slider")).toBeVisible();
 
     await page.getByTestId("go-live-button").click();
 

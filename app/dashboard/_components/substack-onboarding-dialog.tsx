@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { parseSubstackSubdomain } from "@/lib/import/substack-subdomain";
 import { useRubiconClient } from "@/lib/rubicon/auth";
+import { SubstackSuggestionLogo } from "./substack-suggestion-logo";
 
 const EASE_OUT = [0.23, 1, 0.32, 1] as const;
 
@@ -19,14 +20,25 @@ const LEGACY_USERNAME_KEY = "rubicon-substack-username";
 
 const IMPORT_EMAIL = "micacao15@gmail.com";
 const PRICE_MIN = 0.0001;
-const PRICE_MAX = 0.02;
+const PRICE_SLIDER_MAX = 1;
 const PRICE_STEP = 0.0001;
 const PRICE_DEFAULT = 0.001;
+const PRICE_SLIDER_MIN_EXPONENT = Math.log10(PRICE_MIN);
+const PRICE_SLIDER_MAX_EXPONENT = Math.log10(PRICE_SLIDER_MAX);
+const PRICE_SLIDER_STEP = 0.01;
 
-/** Clamp a dollar price into the slider's range, snapped to its step. */
+/** Clamp a dollar price into the slider's range, snapped to atomic-USDC precision. */
 function snapPrice(usd: number): number {
-  const clamped = Math.min(PRICE_MAX, Math.max(PRICE_MIN, usd));
+  const clamped = Math.min(PRICE_SLIDER_MAX, Math.max(PRICE_MIN, usd));
   return Math.round(clamped / PRICE_STEP) * PRICE_STEP;
+}
+
+function priceToSliderValue(usd: number): number {
+  return Math.log10(Math.min(PRICE_SLIDER_MAX, Math.max(PRICE_MIN, usd)));
+}
+
+function sliderValueToPrice(value: number): number {
+  return snapPrice(10 ** value);
 }
 
 type Step = "welcome" | "platform" | "connect" | "import" | "price" | "success";
@@ -138,6 +150,7 @@ export function SubstackOnboardingDialog({
   // Step 4 — price
   const [archive, setArchive] = useState<ArchiveStats | null>(null);
   const [price, setPrice] = useState(PRICE_DEFAULT);
+  const [isFree, setIsFree] = useState(false);
   /** Raw text in the price readout while it's being typed in; null shows the
    * canonical price. Agents (and keyboards) set the number field, sliders and
    * the recommended shortcut clear it. */
@@ -153,10 +166,11 @@ export function SubstackOnboardingDialog({
   const [publishedCount, setPublishedCount] = useState(0);
 
   function effectivePostPrice(postId: string): number {
+    if (isFree) return 0;
     const raw = postPrices[postId];
     if (raw === undefined || raw.trim() === "") return price;
     const parsed = Number(raw);
-    return Number.isFinite(parsed) && parsed > 0 ? Math.min(PRICE_MAX, Math.max(PRICE_MIN, parsed)) : price;
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : price;
   }
 
   const [demoPressing, setDemoPressing] = useState(false);
@@ -476,7 +490,8 @@ export function SubstackOnboardingDialog({
                 .filter((post) => selectedPostIds.includes(post.id))
                 .map((post) => ({ id: post.id, pricePerWordCents: Number((effectivePostPrice(post.id) * 100).toFixed(4)) })) }
             : { applyToAll: true }),
-          globalPricePerWordCents: Number((price * 100).toFixed(4)),
+          globalPricePerWordCents: Number(((isFree ? 0 : price) * 100).toFixed(4)),
+          accessMode: isFree ? "free" : "paid",
           goLive: true,
         }),
       });
@@ -516,7 +531,8 @@ export function SubstackOnboardingDialog({
   const settingsUrl = subdomain ? `https://${subdomain}.substack.com/publish/settings#import-export-settings` : null;
   const mailtoHref = `mailto:${IMPORT_EMAIL}?subject=${encodeURIComponent(`Rubicon import — ${subdomain ?? ""}`)}&body=${encodeURIComponent("Attach your Substack export ZIP here, or forward the export email from Substack to this address.")}`;
   const cardClass = "relative z-10 w-full rounded-lg border border-black/[0.06] bg-white p-8 max-sm:max-w-none max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-5 max-sm:py-7";
-  const sliderPercent = ((price - PRICE_MIN) / (PRICE_MAX - PRICE_MIN)) * 100;
+  const sliderValue = priceToSliderValue(price);
+  const sliderPercent = ((sliderValue - PRICE_SLIDER_MIN_EXPONENT) / (PRICE_SLIDER_MAX_EXPONENT - PRICE_SLIDER_MIN_EXPONENT)) * 100;
   const recommendedPrice = archive && archive.recommendedPriceUsd > 0 ? snapPrice(archive.recommendedPriceUsd) : null;
   const selectedPosts = archive?.posts.filter((post) => selectedPostIds.includes(post.id)) ?? [];
   const selectedWordCount = selectedPosts.reduce((sum, post) => sum + post.wordCount, 0);
@@ -525,10 +541,10 @@ export function SubstackOnboardingDialog({
   const archiveTotalUsd = archive
     ? archive.posts.length
       ? selectedPosts.reduce((sum, post) => sum + post.wordCount * effectivePostPrice(post.id), 0)
-      : archive.totalWordCount * price
+      : archive.totalWordCount * (isFree ? 0 : price)
     : 0;
   const overrideCount = archive
-    ? selectedPosts.filter((post) => Math.abs(effectivePostPrice(post.id) - price) > 1e-9).length
+    ? selectedPosts.filter((post) => Math.abs(effectivePostPrice(post.id) - (isFree ? 0 : price)) > 1e-9).length
     : 0;
 
   return (
@@ -726,7 +742,7 @@ export function SubstackOnboardingDialog({
                 <ul
                   id="substack-suggestions"
                   role="listbox"
-                  className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-72 overflow-y-auto rounded-lg bg-white py-1 shadow-[0_1px_3px_rgba(22,24,29,0.08),0_10px_30px_rgba(22,24,29,0.14)]"
+                  className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-72 overflow-y-auto rounded-lg border border-[var(--line)] bg-white py-1"
                 >
                   {suggestions.map((suggestion, index) => (
                     <li key={suggestion.subdomain} role="option" aria-selected={index === activeSuggestion}>
@@ -739,12 +755,7 @@ export function SubstackOnboardingDialog({
                         onMouseEnter={() => setActiveSuggestion(index)}
                         className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${index === activeSuggestion ? "bg-[var(--surface-muted)]" : ""}`}
                       >
-                        {suggestion.logoUrl ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- remote Substack logos aren't in next.config image domains
-                          <img src={suggestion.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-md object-cover" loading="lazy" />
-                        ) : (
-                          <span className="h-8 w-8 shrink-0 rounded-md bg-[#dedfe3]" aria-hidden="true" />
-                        )}
+                        <SubstackSuggestionLogo src={suggestion.logoUrl} name={suggestion.name || suggestion.subdomain} />
                         <span className="min-w-0">
                           <span className="block truncate text-sm font-medium">{suggestion.name || suggestion.subdomain}</span>
                           <span className="block truncate text-xs text-[var(--muted)]">
@@ -929,45 +940,65 @@ export function SubstackOnboardingDialog({
             </div>
 
             <div className="mt-7">
-              <div className="flex items-baseline justify-between">
-                <span className="text-sm font-medium">Price per word</span>
-                <span className="mono text-sm font-semibold tabular-nums">
-                  $
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={PRICE_MIN}
-                    max={PRICE_MAX}
-                    step={PRICE_STEP}
-                    value={priceDraft ?? price.toFixed(4)}
-                    onChange={(event) => {
-                      setPriceDraft(event.target.value);
-                      const parsed = Number(event.target.value);
-                      if (Number.isFinite(parsed) && parsed > 0) setPrice(snapPrice(parsed));
-                    }}
-                    onBlur={() => setPriceDraft(null)}
-                    className="substack-price-input"
-                    data-testid="price-input"
-                    aria-label="Price per word in USDC"
-                  />
-                  {" / word"}
-                </span>
-              </div>
-              <input
-                type="range"
-                min={PRICE_MIN}
-                max={PRICE_MAX}
-                step={PRICE_STEP}
-                value={price}
-                onChange={(event) => {
-                  setPrice(Number(event.target.value));
-                  setPriceDraft(null);
-                }}
-                className="substack-price-slider mt-3 w-full"
-                style={{ background: `linear-gradient(to right, #18181b ${sliderPercent}%, #e4e4e7 ${sliderPercent}%)` }}
-                aria-label="Price per word in USDC"
-              />
-              {recommendedPrice !== null && (
+              <label className="flex cursor-pointer items-center gap-2.5 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={isFree}
+                  onChange={(event) => {
+                    setIsFree(event.target.checked);
+                    setPriceDraft(null);
+                  }}
+                  className="h-4 w-4 accent-[var(--ink)]"
+                  data-testid="free-access-checkbox"
+                />
+                <span className="text-sm font-medium">Make these articles free</span>
+              </label>
+
+              <fieldset disabled={isFree} className="mt-5 disabled:opacity-40">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-medium">Price per word</span>
+                  <span className="mono text-sm font-semibold tabular-nums">
+                    $
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={PRICE_MIN}
+                      step={PRICE_STEP}
+                      value={priceDraft ?? price.toFixed(4)}
+                      onChange={(event) => {
+                        setPriceDraft(event.target.value);
+                        const parsed = Number(event.target.value);
+                        if (Number.isFinite(parsed) && parsed >= PRICE_MIN) setPrice(parsed);
+                      }}
+                      onBlur={() => setPriceDraft(null)}
+                      className="substack-price-input"
+                      data-testid="price-input"
+                      aria-label="Price per word in USDC"
+                    />
+                    {" / word"}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={PRICE_SLIDER_MIN_EXPONENT}
+                  max={PRICE_SLIDER_MAX_EXPONENT}
+                  step={PRICE_SLIDER_STEP}
+                  value={sliderValue}
+                  onChange={(event) => {
+                    setPrice(sliderValueToPrice(Number(event.target.value)));
+                    setPriceDraft(null);
+                  }}
+                  className="substack-price-slider mt-3 w-full"
+                  style={{ background: `linear-gradient(to right, #18181b ${sliderPercent}%, #e4e4e7 ${sliderPercent}%)` }}
+                  aria-label="Price per word slider"
+                  aria-valuetext={`$${price.toFixed(4)} per word`}
+                />
+                <div className="mt-1 flex justify-between text-[0.65rem] tabular-nums text-[var(--quiet)]">
+                  <span>${PRICE_MIN}</span>
+                  <span>${PRICE_SLIDER_MAX}</span>
+                </div>
+              </fieldset>
+              {!isFree && recommendedPrice !== null && (
                 <button
                   type="button"
                   onClick={() => {
@@ -985,7 +1016,7 @@ export function SubstackOnboardingDialog({
               <div className="rounded-lg bg-[var(--surface-muted)] p-4">
                 <div className="mono text-[0.65rem] uppercase leading-4 tracking-[0.1em] text-[var(--muted)]">Your average post</div>
                 <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-[-0.02em]">
-                  ${(archive.averageWordCount * price).toFixed(2)}
+                  ${(archive.averageWordCount * (isFree ? 0 : price)).toFixed(2)}
                 </div>
                 <div className="mt-1 text-xs text-[var(--muted)]">{archive.averageWordCount.toLocaleString()} words</div>
               </div>
@@ -1001,7 +1032,7 @@ export function SubstackOnboardingDialog({
             </div>
 
             {archive.posts.length > 0 && (
-              <div className="mt-3 rounded-lg bg-[var(--surface-muted)]">
+              <div className={`mt-3 rounded-lg bg-[var(--surface-muted)] ${isFree ? "opacity-40" : ""}`}>
                 <button
                   type="button"
                   onClick={() => setDrawerOpen((current) => !current)}
@@ -1044,11 +1075,10 @@ export function SubstackOnboardingDialog({
                           <input
                             type="number"
                             inputMode="decimal"
-                            min={PRICE_MIN}
-                            max={PRICE_MAX}
+                            min={0}
                             step={PRICE_STEP}
                             value={postPrices[post.id] ?? price.toFixed(4)}
-                            disabled={!selectedPostIds.includes(post.id)}
+                            disabled={isFree || !selectedPostIds.includes(post.id)}
                             onChange={(event) => setPostPrices((current) => ({ ...current, [post.id]: event.target.value }))}
                             className="h-8 w-24 rounded-md bg-white px-2 text-sm tabular-nums outline-none transition focus:ring-2 focus:ring-[rgba(22,24,29,0.2)]"
                             aria-label={`Price per word for ${post.title || "untitled post"}`}
@@ -1163,7 +1193,7 @@ function uploadHttpError(status: number, statusText: string): string {
  */
 function ExportSettingsPreview() {
   return (
-    <div className="mt-3 rounded-lg bg-white p-3 shadow-[0_1px_2px_rgba(22,24,29,0.05),0_5px_16px_rgba(22,24,29,0.07)]" aria-hidden="true">
+    <div className="mt-3 rounded-lg border border-[var(--line)] bg-white p-3" aria-hidden="true">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-xs font-semibold">Export your data</div>

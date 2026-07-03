@@ -11,13 +11,15 @@
  * SELECT on live articles + creators).
  */
 import { createClient } from "@supabase/supabase-js";
-import type { ArticleSourcePlatform, ArticleState } from "./types";
+import type { ArticleAccessMode, ArticleSourcePlatform, ArticleState } from "./types";
 
 export interface PublicArticle {
   id: string;
   title: string;
   author: string;
-  /** Price per single word, in atomic USDC units. */
+  /** Whether agents pay to read this article. */
+  accessMode: ArticleAccessMode;
+  /** Price per single word, in atomic USDC units. Ignored when accessMode is "free". */
   pricePerWordAtomic: string;
   /** Optional cap on the total an agent can be charged for one article. */
   maxArticlePriceAtomic: string | null;
@@ -51,6 +53,7 @@ type ArticleRow = {
   title: string;
   author: string;
   state: ArticleState;
+  access_mode: ArticleAccessMode | null;
   price_per_word_atomic: string;
   max_article_price_atomic: string | null;
   total_words: number;
@@ -93,7 +96,7 @@ export async function listPublicCreators(): Promise<PublicCreator[]> {
 
   const { data: articles, error: articlesError } = await supabase
     .from("articles")
-    .select("id, creator_id, title, author, state, price_per_word_atomic, max_article_price_atomic, total_words, source_platform, source_url, source_author_handle, created_at, updated_at")
+    .select("id, creator_id, title, author, state, access_mode, price_per_word_atomic, max_article_price_atomic, total_words, source_platform, source_url, source_author_handle, created_at, updated_at")
     .eq("state", "live")
     .order("updated_at", { ascending: false })
     .returns<ArticleRow[]>();
@@ -179,6 +182,8 @@ export async function listPublicCreators(): Promise<PublicCreator[]> {
       id: article.id,
       title: article.title,
       author: article.author,
+      // Legacy rows written before the access_mode column default to paid.
+      accessMode: article.access_mode ?? "paid",
       pricePerWordAtomic: article.price_per_word_atomic,
       maxArticlePriceAtomic: article.max_article_price_atomic,
       totalWords: article.total_words,

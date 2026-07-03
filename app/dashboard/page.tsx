@@ -62,9 +62,8 @@ export default function OverviewPage() {
 
   const walletConnected = Boolean(wallet.data?.address);
   const hasArticles = (articles.data?.length ?? 0) > 0;
-  const hasPricedArticle = (articles.data ?? []).some((a) => Number(a.pricePerWordAtomic) > 0);
   const hasLive = (articles.data ?? []).some((a) => a.state === "live");
-  const onboardingComplete = !forceNewUser && walletConnected && hasLive && hasPricedArticle;
+  const onboardingComplete = !forceNewUser && walletConnected && hasLive;
 
   const trendBars = useMemo(
     () => buildTrend(activity.data ?? [], "earnings"),
@@ -302,7 +301,6 @@ function OnboardingChecklistCard({
   }, []);
 
   const hasArticles = articles.length > 0;
-  const hasPricedArticle = articles.some((article) => Number(article.pricePerWordAtomic) > 0);
   const hasLive = articles.some((article) => article.state === "live");
   const hasSections = articles.some((article) => article.sections.length > 0);
   const firstArticleHref = hasArticles ? `/dashboard/articles/${articles.find((article) => article.state !== "live")?.id ?? articles[0].id}` : "/dashboard/articles/new";
@@ -320,7 +318,7 @@ function OnboardingChecklistCard({
       ],
     },
     { title: "Review the sections", description: "Check the structure agents use to find relevant passages.", complete: hasSections, actions: [{ label: "Review sections", href: firstArticleHref }] },
-    { title: "Choose a price per word", description: "Set the rate agents pay for delivered words.", complete: hasPricedArticle, actions: [{ label: "Set pricing", href: firstArticleHref }] },
+    { title: "Choose access", description: "Keep it free or set a per-word price.", complete: hasArticles, actions: [{ label: "Set access", href: firstArticleHref }] },
     { title: "Finish creator settings", description: "Confirm the account used for payouts.", complete: walletConnected, actions: [{ label: "Open settings", href: "/dashboard/settings" }] },
     { title: "Publish", description: "Make the reviewed article available to agents.", complete: hasLive, actions: [{ label: "Review and publish", href: firstArticleHref }] },
     { title: "Track reads and earnings", description: "See paid interactions after your article is live.", complete: false, actions: [{ label: "View earnings", href: "/dashboard/earnings" }] },

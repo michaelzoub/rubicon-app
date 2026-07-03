@@ -6,10 +6,12 @@
  * article, pricing, and wallet data.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { accessModeOf, canPublishPaid, selectReadEvents } from "./access";
 import { parseSections } from "./sections";
 import { generateExtensionToken, hashExtensionToken, tokenPrefix } from "./extension-tokens";
 import type {
   Article,
+  ArticleAccessMode,
   ArticleDetail,
   ArticleImportMeta,
   ArticleSection,
@@ -87,6 +89,8 @@ type ArticleRow = {
   title: string;
   author: string;
   state: Article["state"];
+  // Nullable to tolerate legacy rows written before the column existed.
+  access_mode: ArticleAccessMode | null;
   price_per_word_atomic: string;
   max_article_price_atomic: string | null;
   total_words: number;
@@ -109,7 +113,7 @@ type ArticleRow = {
 // Single source of truth for the article column projection, so every query that
 // hydrates an ArticleRow stays in sync (including the import provenance fields).
 const ARTICLE_COLUMNS =
-  "id, creator_id, title, author, state, price_per_word_atomic, max_article_price_atomic, total_words, revision, seller_agent_config, body, is_imported, source_platform, source_url, source_author_name, source_author_handle, source_published_at, imported_at, import_warnings, is_partial_import, created_at, updated_at";
+  "id, creator_id, title, author, state, access_mode, price_per_word_atomic, max_article_price_atomic, total_words, revision, seller_agent_config, body, is_imported, source_platform, source_url, source_author_name, source_author_handle, source_published_at, imported_at, import_warnings, is_partial_import, created_at, updated_at";
 
 type ArticleSectionRow = {
   id: string;
@@ -153,6 +157,29 @@ type WordPaymentRow = {
   transfer_id: string | null;
   settlement_id: string | null;
   settlement_ids: string[] | null;
+  created_at: string;
+};
+
+// The gateway's per-word *delivery* ledger: one row per word streamed to an
+// agent, written whether or not the word was billed. For free articles there
+// are no word_payments, so readership (words read, reading agents, per-section
+// interest) is sourced from here instead. Paid articles keep deriving reads
+// from word_payments so a read always lines up with money that changed hands.
+type WordDeliveryRow = {
+  id: string;
+  article_id: string;
+  creator_id: string;
+  session_id: string;
+  sequence: number;
+  created_at: string;
+};
+
+// The minimal shape read-count/analytics need. Both WordPaymentRow and
+// WordDeliveryRow satisfy it, so the same reducers work for paid and free.
+type ReadEvent = {
+  article_id: string;
+  session_id: string;
+  sequence: number;
   created_at: string;
 };
 
@@ -269,6 +296,12 @@ function mapSection(row: ArticleSectionRow): ArticleSection {
   };
 }
 
+// The per-word events that count as "reads" for an article: deliveries for free
+// articles (no payments exist), payments for paid articles. See ./access.
+function readEventsFor(row: ArticleRow, payments: WordPaymentRow[], deliveries: WordDeliveryRow[]): ReadEvent[] {
+  return selectReadEvents<ReadEvent>(row, payments, deliveries);
+}
+
 function mapImportMeta(row: ArticleRow): ArticleImportMeta | null {
   if (!row.is_imported) return null;
   return {
@@ -289,11 +322,15 @@ function mapArticle(
   sections: ArticleSectionRow[],
   payments: WordPaymentRow[],
   sessions: StreamSessionRow[],
+  deliveries: WordDeliveryRow[],
 ): Article {
   const articlePayments = payments.filter((payment) => payment.article_id === row.id);
   const articleSessions = sessions.filter((session) => session.article_id === row.id);
-  const lastReadAt = articlePayments.reduce<string | null>((latest, payment) => {
-    if (!latest || payment.created_at > latest) return payment.created_at;
+  // Reads come from deliveries for free articles, payments for paid ones;
+  // earnings always come from payments (free articles simply have none).
+  const reads = readEventsFor(row, payments, deliveries);
+  const lastReadAt = reads.reduce<string | null>((latest, read) => {
+    if (!latest || read.created_at > latest) return read.created_at;
     return latest;
   }, null);
 
@@ -302,6 +339,7 @@ function mapArticle(
     title: row.title,
     author: row.author,
     state: row.state,
+    accessMode: accessModeOf(row),
     importMeta: mapImportMeta(row),
     pricePerWordAtomic: row.price_per_word_atomic,
     maxArticlePriceAtomic: row.max_article_price_atomic,
@@ -310,7 +348,7 @@ function mapArticle(
     sellerAgentConfig: row.seller_agent_config,
     sections: sections.filter((section) => section.article_id === row.id).sort((a, b) => a.ordinal - b.ordinal).map(mapSection),
     usage: {
-      wordsRead: articlePayments.length,
+      wordsRead: reads.length,
       agentReads: new Set(articleSessions.map((session) => session.id)).size,
       earnings: sumAtomic(articlePayments.map((payment) => payment.creator_amount_atomic)),
       lastReadAt,
@@ -335,6 +373,19 @@ async function maybe<T>(promise: PromiseLike<{ data: T | null; error: { code?: s
   });
   if (error && error.code !== "PGRST116") throw toRubiconError(error);
   return data;
+}
+
+// For optional/auxiliary tables: resolve to an empty list on any failure (a
+// missing table, a network blip) instead of throwing, so an optional data
+// source never takes down the surrounding query.
+async function bestEffortRows<T>(promise: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  try {
+    const { data, error } = await Promise.resolve(promise);
+    if (error) return [];
+    return data ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, getIdentity }: RubiconClientOptions) {
@@ -410,10 +461,10 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
     const articleIds = articles.map((article) => article.id);
 
     if (articleIds.length === 0) {
-      return { articles, sections: [], payments: [], sessions: [] };
+      return { articles, sections: [], payments: [], sessions: [], deliveries: [] };
     }
 
-    const [sections, payments, sessions] = await Promise.all([
+    const [sections, payments, sessions, deliveries] = await Promise.all([
       must(
         supabase
           .from("article_sections")
@@ -440,9 +491,21 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
           .order("created_at", { ascending: false })
           .returns<StreamSessionRow[]>(),
       ),
+      // Best-effort: word_deliveries only feeds free-article readership. If the
+      // gateway hasn't provisioned the table yet, degrade to zero reads for free
+      // articles rather than failing the whole dashboard query.
+      bestEffortRows<WordDeliveryRow>(
+        supabase
+          .from("word_deliveries")
+          .select("id, article_id, creator_id, session_id, sequence, created_at")
+          .eq("creator_id", creatorId)
+          .in("article_id", articleIds)
+          .order("created_at", { ascending: false })
+          .returns<WordDeliveryRow[]>(),
+      ),
     ]);
 
-    return { articles, sections, payments, sessions };
+    return { articles, sections, payments, sessions, deliveries };
   }
 
   async function replaceSections(articleId: string, body: string, inputSections: CreateArticleInput["sections"] = []) {
@@ -556,8 +619,8 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
 
     async listArticles(): Promise<Article[]> {
       const identity = requireIdentity(getIdentity);
-      const { articles, sections, payments, sessions } = await articleContext(identity.id);
-      return articles.map((article) => mapArticle(article, sections, payments, sessions));
+      const { articles, sections, payments, sessions, deliveries } = await articleContext(identity.id);
+      return articles.map((article) => mapArticle(article, sections, payments, sessions, deliveries));
     },
 
     async createArticle(input: CreateArticleInput): Promise<Article> {
@@ -578,6 +641,7 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
             title: input.title,
             author: input.author,
             state: "draft",
+            access_mode: input.accessMode ?? "paid",
             price_per_word_atomic: input.pricePerWordAtomic,
             max_article_price_atomic: input.maxArticlePriceAtomic ?? null,
             total_words: totalWords,
@@ -618,17 +682,20 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
         article.total_words = authoritativeWords;
       }
 
-      return mapArticle(article, [], [], []);
+      return mapArticle(article, [], [], [], []);
     },
 
     async getArticle(articleId: string): Promise<ArticleDetail> {
       const identity = requireIdentity(getIdentity);
-      const { articles, sections, payments, sessions } = await articleContext(identity.id, articleId);
+      const { articles, sections, payments, sessions, deliveries } = await articleContext(identity.id, articleId);
       const article = articles[0];
       if (!article) throw new RubiconError("not_found", 404, "article_not_found", "Article not found.");
 
-      const base = mapArticle(article, sections, payments, sessions);
+      const base = mapArticle(article, sections, payments, sessions, deliveries);
       const articlePayments = payments.filter((payment) => payment.article_id === articleId);
+      // Per-section interest is a *read* metric, so it follows the same ledger as
+      // usage.wordsRead: deliveries for free articles, payments for paid.
+      const reads = readEventsFor(article, payments, deliveries);
       const articleSessions: SellerAgentSession[] = sessions
         .filter((session) => session.article_id === articleId)
         .map((session) => ({
@@ -641,7 +708,7 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
       const sectionUsage: SectionUsage[] = base.sections.map((section) => ({
         sectionId: section.sectionId,
         heading: section.heading,
-        wordsRead: articlePayments.filter((payment) => payment.sequence >= section.wordStart && payment.sequence < section.wordStart + section.wordCount).length,
+        wordsRead: reads.filter((read) => read.sequence >= section.wordStart && read.sequence < section.wordStart + section.wordCount).length,
       }));
 
       return {
@@ -692,6 +759,7 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(input.author !== undefined ? { author: input.author } : {}),
         ...(input.body !== undefined ? { body: input.body } : {}),
+        ...(input.accessMode !== undefined ? { access_mode: input.accessMode } : {}),
         ...(input.pricePerWordAtomic !== undefined ? { price_per_word_atomic: input.pricePerWordAtomic } : {}),
         ...(input.maxArticlePriceAtomic !== undefined ? { max_article_price_atomic: input.maxArticlePriceAtomic } : {}),
         ...(input.sellerAgentConfig !== undefined ? { seller_agent_config: input.sellerAgentConfig } : {}),
@@ -706,6 +774,36 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
 
     async publishArticle(articleId: string): Promise<Article> {
       const identity = requireIdentity(getIdentity);
+
+      // Paid articles must have somewhere for money to land and a price to
+      // charge; free articles need neither. Enforced here because the rule is
+      // business logic the database can't express. Free is a deliberate choice,
+      // so a zero-priced *paid* article is a misconfiguration, not "free".
+      const article = await must(
+        supabase
+          .from("articles")
+          .select("access_mode, price_per_word_atomic")
+          .eq("id", articleId)
+          .eq("creator_id", identity.id)
+          .single<Pick<ArticleRow, "access_mode" | "price_per_word_atomic">>(),
+      );
+      if (accessModeOf(article) === "paid") {
+        const wallet = await maybe(
+          supabase
+            .from("creator_wallets")
+            .select("verified")
+            .eq("creator_id", identity.id)
+            .maybeSingle<{ verified: boolean }>(),
+        );
+        if (!canPublishPaid(article.price_per_word_atomic, wallet?.verified ?? false)) {
+          // Surface the specific unmet requirement so the creator knows what to fix.
+          if (!(Number(article.price_per_word_atomic) > 0)) {
+            throw new RubiconError("validation", 0, "price_required", "Set a price per word before publishing, or mark this article free.");
+          }
+          throw new RubiconError("validation", 0, "wallet_required", "Connect and verify a receiving wallet before publishing a paid article.");
+        }
+      }
+
       await must(
         supabase
           .from("articles")

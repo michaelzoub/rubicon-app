@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Archive, ArrowLeft, Eye, Loader2, Pause, Play, Trash2, X } from "lucide-react";
-import type { ArticleDetail } from "@/lib/rubicon/types";
+import type { ArticleAccessMode, ArticleDetail } from "@/lib/rubicon/types";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import {
   atomicToUsd,
@@ -82,6 +82,11 @@ export default function ArticleDetailPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-semibold tracking-[-0.01em] sm:text-3xl">{data.title}</h1>
                 <ArticleStatePill state={data.state} />
+                {data.accessMode === "free" && (
+                  <span className="mono rounded-full bg-[#e8f6ef] px-2.5 py-1 text-[0.66rem] uppercase tracking-[0.12em] text-[#165c3e]">
+                    Free
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
@@ -218,8 +223,12 @@ export default function ArticleDetailPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile label="Words read" value={data.usage.wordsRead.toLocaleString()} />
             <StatTile label="Agent reads" value={data.usage.agentReads.toLocaleString()} />
-            <StatTile label="Earnings" value={formatUsd(data.usage.earnings)} />
-            <StatTile label="Price per word" value={formatUsd(data.pricePerWordAtomic)} hint={`${data.totalWords.toLocaleString()} words total`} />
+            <StatTile label="Earnings" value={data.accessMode === "free" ? "—" : formatUsd(data.usage.earnings)} />
+            <StatTile
+              label={data.accessMode === "free" ? "Access" : "Price per word"}
+              value={data.accessMode === "free" ? "Free" : formatUsd(data.pricePerWordAtomic)}
+              hint={`${data.totalWords.toLocaleString()} words total`}
+            />
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
@@ -319,11 +328,12 @@ function EditPanel({
   article: ArticleDetail;
   pending: boolean;
   error: string | null;
-  onSave: (input: { title: string; author: string; body: string; pricePerWordAtomic: string; maxArticlePriceAtomic: string | null }) => void;
+  onSave: (input: { title: string; author: string; body: string; accessMode: ArticleAccessMode; pricePerWordAtomic: string; maxArticlePriceAtomic: string | null }) => void;
 }) {
   const [title, setTitle] = useState(article.title);
   const [author, setAuthor] = useState(article.author);
   const [body, setBody] = useState(article.body);
+  const [accessMode, setAccessMode] = useState<ArticleAccessMode>(article.accessMode);
   const [pricePerWord, setPricePerWord] = useState(atomicToUsd(article.pricePerWordAtomic).toString());
   const [maxPrice, setMaxPrice] = useState(article.maxArticlePriceAtomic ? atomicToUsd(article.maxArticlePriceAtomic).toString() : "");
 
@@ -331,9 +341,12 @@ function EditPanel({
     setTitle(article.title);
     setAuthor(article.author);
     setBody(article.body);
+    setAccessMode(article.accessMode);
     setPricePerWord(atomicToUsd(article.pricePerWordAtomic).toString());
     setMaxPrice(article.maxArticlePriceAtomic ? atomicToUsd(article.maxArticlePriceAtomic).toString() : "");
   }, [article]);
+
+  const isFree = accessMode === "free";
 
   return (
     <Card className="p-6">
@@ -351,15 +364,42 @@ function EditPanel({
           <span className="text-sm font-medium">Author</span>
           <input value={author} onChange={(e) => setAuthor(e.target.value)} className="h-11 rounded-lg bg-[var(--surface-muted)] px-3 outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]" />
         </label>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-2">
+          <span className="text-sm font-medium">Access</span>
+          <div className="flex gap-2" role="radiogroup" aria-label="Article access">
+            {(["paid", "free"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                role="radio"
+                aria-checked={accessMode === mode}
+                data-testid={`edit-access-${mode}`}
+                onClick={() => setAccessMode(mode)}
+                className={`flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition ${
+                  accessMode === mode
+                    ? "border-[var(--river)] bg-[var(--river-pale)] text-[var(--river-deep)]"
+                    : "border-[var(--line)] bg-[var(--surface-muted)] text-[var(--muted)] hover:border-[var(--river-line)]"
+                }`}
+              >
+                {mode === "paid" ? "Paid per word" : "Free for all agents"}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-[var(--muted)]">
+            {isFree
+              ? "Free articles are delivered in full to any agent and earn nothing. Publishing needs no wallet."
+              : "Paid articles require a verified receiving wallet and a positive price to publish."}
+          </span>
+        </div>
+        <div className={`grid gap-4 sm:grid-cols-2 ${isFree ? "opacity-40" : ""}`}>
           <label className="grid gap-2">
             <span className="text-sm font-medium">Price per word ($)</span>
-            <input value={pricePerWord} onChange={(e) => setPricePerWord(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="0.0001" className="h-11 rounded-lg bg-[var(--surface-muted)] px-3 outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]" />
+            <input value={isFree ? "" : pricePerWord} onChange={(e) => setPricePerWord(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder={isFree ? "Free" : "0.0001"} disabled={isFree} className="h-11 rounded-lg bg-[var(--surface-muted)] px-3 outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]" />
             <span className="text-xs text-[var(--muted)]">Agents pay only for the words they reveal. You can update pricing anytime.</span>
           </label>
           <label className="grid gap-2">
             <span className="text-sm font-medium">Maximum article price ($)</span>
-            <input value={maxPrice} onChange={(e) => setMaxPrice(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder="No cap" className="h-11 rounded-lg bg-[var(--surface-muted)] px-3 outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]" />
+            <input value={isFree ? "" : maxPrice} onChange={(e) => setMaxPrice(e.target.value.replace(/[^0-9.]/g, ""))} inputMode="decimal" placeholder={isFree ? "—" : "No cap"} disabled={isFree} className="h-11 rounded-lg bg-[var(--surface-muted)] px-3 outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]" />
           </label>
         </div>
       </div>
@@ -367,14 +407,17 @@ function EditPanel({
       <div className="mt-5 flex justify-end">
         <button
           type="button"
-          disabled={pending || !title.trim() || !author.trim() || !body.trim() || !(Number(usdToAtomic(Number(pricePerWord))) > 0)}
+          disabled={pending || !title.trim() || !author.trim() || !body.trim() || (!isFree && !(Number(usdToAtomic(Number(pricePerWord))) > 0))}
           onClick={() =>
             onSave({
               title: title.trim(),
               author: author.trim(),
               body: body.trim(),
-              pricePerWordAtomic: usdToAtomic(Number(pricePerWord)),
-              maxArticlePriceAtomic: maxPrice ? usdToAtomic(Number(maxPrice)) : null,
+              accessMode,
+              // A free article carries no price; store "0" so a later switch to
+              // paid starts from a clean, deliberately-priced state.
+              pricePerWordAtomic: isFree ? "0" : usdToAtomic(Number(pricePerWord)),
+              maxArticlePriceAtomic: isFree ? null : maxPrice ? usdToAtomic(Number(maxPrice)) : null,
             })
           }
           className="button button-primary disabled:opacity-50"

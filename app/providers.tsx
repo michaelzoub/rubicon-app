@@ -57,7 +57,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         appId={appId}
         clientId={clientId}
         config={{
-          loginMethods: ["twitter", "email", "wallet"],
+          loginMethods: ["email", "twitter", "wallet"],
           appearance: {
             theme: "light",
             accentColor: "#2f7df6",

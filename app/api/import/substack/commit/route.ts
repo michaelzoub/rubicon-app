@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticatePrivyRequest } from "@/lib/import/substack-export-auth";
+import { isValidOnboardingPrice } from "@/lib/import/onboarding-pricing";
 import { ImportServerError, serviceClient } from "@/lib/rubicon/import-server";
 
 export const runtime = "nodejs";
@@ -15,17 +16,27 @@ interface CommitBody {
   globalPricePerWordCents?: number;
   /** Onboarding: create the articles gated ("live") instead of as drafts. */
   goLive?: boolean;
+  /**
+   * Onboarding: whether the imported articles are free or paid. Free articles
+   * carry a zero price but are marked free explicitly, so they're never
+   * mistaken for unpriced paid drafts. Defaults to paid.
+   */
+  accessMode?: "free" | "paid";
 }
 
 export async function POST(request: Request) {
   try {
     const creatorId = await authenticatePrivyRequest(request);
     const body = await request.json() as CommitBody;
-    const globalPriceCents = Number(body.globalPricePerWordCents);
-    const selections = Array.isArray(body.selections) ? body.selections.filter((item) => item?.id && Number(item.pricePerWordCents) > 0) : [];
-    if (!body.jobId || (body.applyToAll ? !(globalPriceCents > 0) : !selections.length)) {
+    const globalPriceCents = body.globalPricePerWordCents;
+    const hasValidGlobalPrice = isValidOnboardingPrice(globalPriceCents);
+    const selections = Array.isArray(body.selections)
+      ? body.selections.filter((item) => item?.id && isValidOnboardingPrice(item.pricePerWordCents))
+      : [];
+    if (!body.jobId || !hasValidGlobalPrice || (!body.applyToAll && !selections.length)) {
       return responseError(400, "invalid_selection", "Select at least one importable post.");
     }
+    const accessMode = body.accessMode === "free" ? "free" : "paid";
     const supabase = serviceClient();
     let query = supabase.from("creator_import_candidates")
       .select("id,source_post_id,title,subtitle,published_at,audience,word_count,plain_text_private,sections_json_private,warning,status")
@@ -47,7 +58,7 @@ export async function POST(request: Request) {
       const bodyText = sections.map((section) => `${section.heading ? `## ${section.heading}\n\n` : ""}${section.text ?? ""}`).join("\n\n").trim() || candidate.plain_text_private;
       return { articleId, candidate, bodyText, sections, row: {
         id: articleId, creator_id: creatorId, title: candidate.title, author: body.substackUsername?.trim() || "Substack creator",
-        state: body.goLive ? "live" : "draft", price_per_word_atomic: String(Math.round(cents * 10_000)),
+        state: body.goLive ? "live" : "draft", access_mode: accessMode, price_per_word_atomic: String(Math.round(cents * 10_000)),
         max_article_price_atomic: String(Math.round(cents * Number(candidate.word_count) * 10_000)),
         total_words: candidate.word_count, revision: 1, seller_agent_config: null, body: bodyText,
         is_imported: true, source_platform: "substack", source_url: body.substackUsername ? `https://${body.substackUsername}.substack.com` : null,
@@ -71,7 +82,9 @@ export async function POST(request: Request) {
       await Promise.all(articleRows.map((item) => supabase.from("creator_import_candidates").update({ status: "imported", selected_price_per_word_cents: priceById.get(item.candidate.id), updated_at: now }).eq("id", item.candidate.id)));
     }
     await supabase.from("creator_import_jobs").update({ status: "imported", imported_posts: articleRows.length, updated_at: now }).eq("id", body.jobId).eq("creator_id", creatorId);
-    if (globalPriceCents > 0) {
+    // Only persist a creator-wide default from a real positive price — a free
+    // import's zero price would otherwise poison future paid drafts' default.
+    if (hasValidGlobalPrice && globalPriceCents > 0) {
       await supabase.from("creators").update({ default_price_per_word_atomic: String(Math.round(globalPriceCents * 10_000)) }).eq("id", creatorId);
     }
     return NextResponse.json({ imported: articleRows.length, articleIds: articleRows.map((item) => item.articleId) });
