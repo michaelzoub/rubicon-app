@@ -121,7 +121,7 @@ export function TrendChart({
             >
               {/* tooltip */}
               {isActive && bar.value > 0 && (
-                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-center">
+                <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-center">
                   <div className="text-sm font-semibold text-[var(--ink)]">{formatValue(bar.value)}</div>
                   <div className="mono text-[0.6rem] uppercase tracking-[0.1em] text-[var(--muted)]">{bar.fullLabel}</div>
                   {bar.detail && <div className="text-[0.7rem] text-[var(--muted)]">{bar.detail}</div>}

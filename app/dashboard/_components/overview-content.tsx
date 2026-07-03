@@ -151,7 +151,7 @@ export function DashboardOverviewContent({
               <Reveal
                 key={stat.label}
                 delay={index * 0.035}
-                className="relative h-full hover:z-40 focus-within:z-40"
+                className="relative h-full hover:z-50 focus-within:z-50"
               >
                 <StatTile
                   label={stat.label}
@@ -173,7 +173,7 @@ export function DashboardOverviewContent({
           </div>
 
           <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,1fr)]">
-            <Reveal delay={0.08} className="h-full">
+            <Reveal delay={0.08} className="relative h-full hover:z-50 focus-within:z-50">
               <MoneyActivityChart bars={exportData?.trendBars ?? trendBars} />
             </Reveal>
 
@@ -346,7 +346,7 @@ function MoneyActivityChart({ bars }: { bars: TrendBar[] }) {
   const total = bars.reduce((sum, bar) => sum + bar.value, 0);
   const paidDays = bars.filter((bar) => bar.value > 0).length;
   return (
-    <Card className="flex h-full min-h-[13rem] flex-col overflow-hidden p-3.5">
+    <Card className="flex h-full min-h-[13rem] flex-col p-3.5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h2 className="text-base font-semibold">Earnings activity</h2>
@@ -393,7 +393,7 @@ export function ContentProtectionPolicy() {
       <button type="button" className="button button-secondary text-sm">
         <ShieldCheck size={15} aria-hidden="true" /> Content Protection Policy
       </button>
-      <div className="pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-40 w-[min(27rem,calc(100vw-2rem))] translate-y-1 rounded-[10px] bg-white p-4 text-left opacity-0 transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+      <div className="pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(27rem,calc(100vw-2rem))] translate-y-1 rounded-[10px] bg-white p-4 text-left opacity-0 transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
         <div className="flex items-center gap-2.5">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted)]">
             <ShieldCheck size={17} aria-hidden="true" />
@@ -603,7 +603,11 @@ function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
 }
 
 const PRESET_BACKGROUNDS = [
-  { src: "/export-card-painting.png", label: "Painting" },
+  { src: "/export-card-michele-1.jpeg", label: "Harbor" },
+  { src: "/export-card-michele-2.jpg", label: "Orchard" },
+  { src: "/export-card-michele-3.jpg", label: "Lakeside" },
+  { src: "/export-card-michele-4.jpg", label: "Village path" },
+  { src: "/export-card-painting.png", label: "Pond" },
 ];
 
 const PRESET_THUMB_SIZE = 44;
@@ -623,7 +627,7 @@ function ExportButton({
   const [pngUrl, setPngUrl] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "blocked">("idle");
   const [celebrationKey, setCelebrationKey] = useState(0);
-  const [bgImage, setBgImage] = useState<string>("/export-card-painting.png");
+  const [bgImage, setBgImage] = useState<string>("/export-card-michele-1.jpeg");
   const [customBgs, setCustomBgs] = useState<{ src: string; label: string }[]>([]);
   const [loadedPresets, setLoadedPresets] = useState<{ src: string; label: string }[]>([]);
 
@@ -876,8 +880,11 @@ function CopyCelebration() {
 }
 
 /**
- * Renders the share card as a portrait poster with subtle laurel art, a close
- * earnings card, and a white metrics panel.
+ * Renders the share card as "The Crossing" — a flat portrait poster split by a
+ * single full-bleed rule. Above the line the chosen artwork runs edge to edge
+ * (the writing); below it a dark typographic ledger records what agents paid.
+ * The earnings figure straddles the rule, crossing from art into income — the
+ * Rubicon moment the brand is named for.
  */
 async function renderExportPng({
   username,
@@ -912,20 +919,32 @@ async function renderExportPng({
   ctx.textBaseline = "alphabetic";
 
   const INK = "#0b0d12";
-  const SOFT_BLUE = "#b7caee";
-  const GRAPHITE = "#26303d";
-  const PATH = "#dbe4f2";
-  const LABEL = "#9aa2af";
-  const MUTE = "#6b7280";
-  const GREEN_BG = "#e7f6ec";
-  const GREEN = "#1f8f4e";
-  const FONT = '"Helvetica Neue", Arial, sans-serif';
+  const PAPER = "#ffffff";
+  const MUTED = "rgba(11,13,18,0.55)";
+  const QUIET = "rgba(11,13,18,0.34)";
+  const HAIRLINE = "rgba(11,13,18,0.12)";
+  const RIVER = "#7f9cd4";
+  const GAIN = "#1f8f4e";
+
+  // The dashboard's own faces (Hanken Grotesk / JetBrains Mono) carry into the
+  // artifact; wait for them so the canvas doesn't rasterize a fallback.
+  try {
+    await document.fonts.ready;
+  } catch {
+    // fonts API unavailable — the fallback stacks below still render
+  }
+  const SANS = resolveCanvasFontStack("--font-sans", '"Helvetica Neue", Arial, sans-serif');
+  const MONO = resolveCanvasFontStack("--font-mono", '"SFMono-Regular", Menlo, monospace');
+
   const [painting, logo, avatar] = await Promise.all([
     loadImage(bgImage),
     loadImage("/Header-logo_b.svg"),
     avatarUrl ? loadImage(avatarUrl) : Promise.resolve(null),
   ]);
-  const trendValues = trendBars.map((bar) => bar.value);
+
+  const MARGIN = 64;
+  const RIGHT = W - MARGIN;
+  const CROSSING = 620;
 
   // letterSpacing lands on the 2d context in modern browsers but isn't yet in
   // the TS DOM lib; cast so the source type-checks.
@@ -933,291 +952,226 @@ async function renderExportPng({
     (ctx as unknown as { letterSpacing: string }).letterSpacing = v;
   };
 
-  const panel = (x: number, y: number, w: number, h: number, r: number, fill: string, stroke?: string) => {
-    ctx.fillStyle = fill;
-    roundRect(ctx, x, y, w, h, r);
-    ctx.fill();
-    if (stroke) {
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
-  };
-
-  const drawLabel = (text: string, x: number, y: number, align: CanvasTextAlign = "left") => {
-    ctx.font = `700 13px ${FONT}`;
-    ctx.fillStyle = LABEL;
+  const monoLabel = (
+    text: string,
+    x: number,
+    y: number,
+    { align = "left" as CanvasTextAlign, color = MUTED, size = 13, tracking = "2.5px" } = {},
+  ) => {
+    ctx.font = `700 ${size}px ${MONO}`;
+    ctx.fillStyle = color;
     ctx.textAlign = align;
-    setSpacing("1.4px");
+    setSpacing(tracking);
     ctx.fillText(text, x, y);
     setSpacing("0px");
     ctx.textAlign = "left";
   };
 
-  // ---- backdrop (darkened atmospheric glass) -----------------------------
-  ctx.fillStyle = "#13261f";
+  const hairline = (y: number) => {
+    ctx.strokeStyle = HAIRLINE;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(MARGIN, y);
+    ctx.lineTo(RIGHT, y);
+    ctx.stroke();
+  };
+
+  // ---- upper bank: the artwork, vivid and full-bleed ----------------------
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, W, H);
   if (painting) {
-    drawBlurredCover(ctx, painting, -52, -52, W + 104, H + 104, { alpha: 0.88, saturate: 0.88 });
+    drawCoverImage(ctx, painting, 0, 0, W, CROSSING);
   }
-  ctx.fillStyle = "rgba(5, 24, 18, 0.46)";
-  ctx.fillRect(0, 0, W, H);
 
-  // ---- top bar -----------------------------------------------------------
+  // Keep a dark wash under the white top chrome for legibility.
+  const chrome = ctx.createLinearGradient(0, 0, 0, 200);
+  chrome.addColorStop(0, "rgba(6,9,14,0.55)");
+  chrome.addColorStop(1, "rgba(6,9,14,0)");
+  ctx.fillStyle = chrome;
+  ctx.fillRect(0, 0, W, 200);
+
   // The source SVG has a roomy square artboard. Crop to its horizontal lockup
-  // so the real white Rubicon mark sits cleanly in the original top-left spot.
+  // so the real white Rubicon mark sits cleanly in the top-left corner.
   if (logo) {
     // drawImage uses the SVG's intrinsic 2000px dimensions, not its 1500-unit
     // viewBox. These source coordinates account for that 4/3 scale.
-    ctx.drawImage(logo, 110, 760, 1740, 470, 64, 54, 210, 57);
+    ctx.drawImage(logo, 110, 760, 1740, 470, MARGIN, 54, 210, 57);
   }
+  monoLabel("PROOF OF PAID READS", RIGHT, 90, { align: "right", color: "rgba(255,255,255,0.85)" });
 
-  // ---- earn card ---------------------------------------------------------
-  const cardW = 860;
-  const backOffset = 14;
-  // Center the combined silhouette: the backing extends left while the black
-  // card extends the same distance farther right.
-  const cardX = (W - cardW) / 2 + backOffset / 2;
-  const cardY = 190;
-  const cardH = 860;
-  const cardR = 48;
+  // ---- lower bank: the ledger ----------------------------------------------
+  ctx.fillStyle = PAPER;
+  ctx.fillRect(0, CROSSING, W, H - CROSSING);
 
-  // A translucent pearlescent backing picks up the atmospheric colors beneath
-  // it while remaining a crisp, axis-aligned second sheet.
-  const glassX = cardX - backOffset;
-  const glassY = cardY - backOffset;
-  const glass = ctx.createLinearGradient(glassX, glassY, glassX + cardW, glassY + cardH);
-  glass.addColorStop(0, "rgba(255,255,255,0.28)");
-  glass.addColorStop(0.42, "rgba(226,239,235,0.1)");
-  glass.addColorStop(1, "rgba(255,255,255,0.16)");
-  ctx.fillStyle = glass;
-  roundRect(ctx, glassX, glassY, cardW, cardH, cardR);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.42)";
-  ctx.lineWidth = 1.5;
+  // The crossing itself — the only full-bleed rule on the card.
+  ctx.strokeStyle = "rgba(11,13,18,0.8)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, CROSSING);
+  ctx.lineTo(W, CROSSING);
   ctx.stroke();
 
-  ctx.fillStyle = "#0b0d12";
-  roundRect(ctx, cardX, cardY, cardW, cardH, cardR);
-  ctx.fill();
+  // ---- the figure, mid-crossing --------------------------------------------
+  // Sized to fit the column and drawn last across both banks.
+  setSpacing("-4px");
+  let amountSize = 192;
+  ctx.font = `800 ${amountSize}px ${SANS}`;
+  while (amountSize > 96 && ctx.measureText(amount).width > RIGHT - MARGIN) {
+    amountSize -= 8;
+    ctx.font = `800 ${amountSize}px ${SANS}`;
+  }
+  ctx.fillStyle = INK;
+  ctx.fillText(amount, MARGIN - 4, CROSSING + 96);
+  setSpacing("0px");
 
-  // The result is the character of the artifact: one large proof statement,
-  // with the amount shown only once rather than repeated inside the receipt.
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `700 66px ${FONT}`;
-  ctx.fillText(amount, cardX + 42, cardY + 92);
-  const amountW = ctx.measureText(amount).width;
-  ctx.font = `600 27px ${FONT}`;
-  ctx.fillText("earned from agent reads", cardX + 42 + amountW + 20, cardY + 92);
-
-  // ---- paid-read receipt -------------------------------------------------
-  const innerX = cardX + 32;
-  const innerW = cardW - 64;
-  const innerY = cardY + 142;
-  const innerH = 500;
-  panel(innerX, innerY, innerW, innerH, 32, "#ffffff");
-
-  const pad = 40;
-  const cx = innerX + pad;
-  const cr = innerX + innerW - pad;
-
-  panel(cr - 106, innerY + 29, 106, 32, 10, "#f1f3f6");
-  ctx.fillStyle = GRAPHITE;
-  ctx.font = `700 14px ${FONT}`;
-  ctx.textAlign = "center";
-  ctx.fillText("14 days live", cr - 53, innerY + 50);
-  ctx.textAlign = "left";
-
-  // Positive growth is useful proof. Negative growth is intentionally omitted
+  // Positive growth is useful proof; negative growth is intentionally omitted
   // from a share artifact rather than turning it into a dashboard report.
-  const delta = computeTrendDelta(trendValues);
-  if (delta.up) {
-    ctx.font = `700 14px ${FONT}`;
-    const pillTextW = ctx.measureText(delta.label).width;
-    const pillH = 32;
-    const pillW = pillTextW + 24;
-    const pillTop = innerY + 29;
-    const pillX = cr - 116 - pillW;
-    panel(pillX, pillTop, pillW, pillH, 10, GREEN_BG);
-    ctx.fillStyle = GREEN;
-    ctx.fillText(delta.label, pillX + 12, pillTop + pillH / 2 + 5);
+  const delta = computeTrendDelta(trendBars.map((bar) => bar.value));
+  const captionY = CROSSING + 152;
+  monoLabel("EARNED FROM AGENT READS", MARGIN, captionY, { size: 15 });
+  if (delta.up && delta.label.startsWith("+")) {
+    ctx.font = `700 15px ${MONO}`;
+    setSpacing("2.5px");
+    const captionW = ctx.measureText("EARNED FROM AGENT READS").width;
+    setSpacing("0px");
+    monoLabel(`${delta.label} VS PRIOR WEEK`, MARGIN + captionW + 28, captionY, { size: 15, color: GAIN });
   }
 
-  // A literal transaction path gives the proof-of-earnings artifact its own
-  // visual language: the agent read becomes paid words, then creator earnings.
-  const pathY = innerY + 138;
-  const pathXs = [cx + 18, (cx + cr) / 2, cr - 18];
-  ctx.strokeStyle = PATH;
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(pathXs[0], pathY);
-  ctx.lineTo(pathXs[2], pathY);
-  ctx.stroke();
-
-  // Small directional notches make the transaction sequence read left-to-right.
-  [
-    (pathXs[0] + pathXs[1]) / 2,
-    (pathXs[1] + pathXs[2]) / 2,
-  ].forEach((x) => {
-    ctx.fillStyle = "#aebed8";
-    ctx.beginPath();
-    ctx.moveTo(x - 4, pathY - 6);
-    ctx.lineTo(x + 5, pathY);
-    ctx.lineTo(x - 4, pathY + 6);
-    ctx.closePath();
-    ctx.fill();
-  });
-
-  const receiptSteps = [
-    { value: reads, label: `agent ${reads === "1" ? "read" : "reads"}` },
-    { value: words, label: "paid words" },
-    { value: amount, label: "earned" },
+  // ---- ruled ledger rows ----------------------------------------------------
+  const rows = [
+    { label: "AGENT READS", value: reads, size: 32 },
+    { label: "PAID WORDS", value: words, size: 32 },
+    { label: "TOP PAID ARTICLE", value: topArticle, size: 26 },
   ];
-  receiptSteps.forEach((step, index) => {
-    const x = pathXs[index];
-    ctx.fillStyle = index === 1 ? SOFT_BLUE : GRAPHITE;
-    ctx.beginPath();
-    ctx.arc(x, pathY, 9, 0, Math.PI * 2);
-    ctx.fill();
-
+  const ledgerTop = 838;
+  const rowH = 72;
+  rows.forEach((row, i) => {
+    const top = ledgerTop + i * rowH;
+    hairline(top);
+    monoLabel(row.label, MARGIN, top + 45);
+    ctx.font = `600 ${row.size}px ${SANS}`;
     ctx.fillStyle = INK;
-    ctx.font = `800 30px ${FONT}`;
-    ctx.textAlign = "center";
-    ctx.fillText(step.value, x, pathY - 28);
-    ctx.fillStyle = MUTE;
-    ctx.font = `600 14px ${FONT}`;
-    ctx.fillText(step.label, x, pathY + 36);
+    ctx.textAlign = "right";
+    ctx.fillText(truncateForCanvas(ctx, row.value, RIGHT - MARGIN - 260), RIGHT, top + 46);
+    ctx.textAlign = "left";
   });
-  ctx.textAlign = "left";
+  hairline(ledgerTop + rows.length * rowH);
 
-  // divider
-  const div1 = innerY + 208;
-  ctx.strokeStyle = "rgba(15,22,38,0.08)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx, div1);
-  ctx.lineTo(cr, div1);
-  ctx.stroke();
+  // ---- 14-day strip ---------------------------------------------------------
+  const stripLabelY = 1102;
+  monoLabel("EARNINGS ACTIVITY", MARGIN, stripLabelY, { color: QUIET });
+  monoLabel("LAST 14 DAYS", RIGHT, stripLabelY, { align: "right", color: QUIET });
+  drawEarningsStrip(ctx, MARGIN, 1126, RIGHT - MARGIN, 78, trendBars, {
+    paid: RIVER,
+    peak: INK,
+    rest: "rgba(11,13,18,0.22)",
+    baseline: HAIRLINE,
+    labels: QUIET,
+    mono: MONO,
+  });
 
-  // activity chart
-  const chartY = div1 + 42;
-  const chartH = innerY + innerH - chartY - 42;
-  drawLabel("EARNINGS ACTIVITY", cx, chartY);
-  drawExportMoneyChart(ctx, cx, chartY + 34, cr - cx, chartH - 34, trendBars, GRAPHITE);
-
-  // Top article breaks out of the receipt into the dark creator-owned surface.
-  const articleY = innerY + innerH + 48;
-  ctx.fillStyle = SOFT_BLUE;
-  roundRect(ctx, cardX + 42, articleY - 14, 6, 88, 3);
-  ctx.fill();
-  ctx.fillStyle = "rgba(255,255,255,0.58)";
-  ctx.font = `600 15px ${FONT}`;
-  ctx.fillText("Top paid article", cardX + 66, articleY);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `700 34px ${FONT}`;
-  ctx.fillText(truncateForCanvas(ctx, topArticle, cardW - 108), cardX + 66, articleY + 42);
-  ctx.fillStyle = "rgba(255,255,255,0.58)";
-  ctx.font = `500 15px ${FONT}`;
-  ctx.fillText(`${words} words accessed by agents`, cardX + 66, articleY + 72);
-
-  // ---- footer ------------------------------------------------------------
-  // Personal creator signature replaces the wallet address entirely.
-  const footY = H - 70;
-  const avatarSize = 42;
-  const avatarX = 64;
-  const avatarY = footY - avatarSize + 10;
-  ctx.font = `700 17px ${FONT}`;
-  const usernameW = ctx.measureText(username).width;
-  const identityX = avatarX - 12;
-  const identityY = avatarY - 6;
-  const identityW = avatarSize + usernameW + 50;
-  const identityGlass = ctx.createLinearGradient(identityX, identityY, identityX + identityW, identityY + 54);
-  identityGlass.addColorStop(0, "rgba(255,255,255,0.22)");
-  identityGlass.addColorStop(1, "rgba(255,255,255,0.08)");
-  ctx.fillStyle = identityGlass;
-  roundRect(ctx, identityX, identityY, identityW, 54, 27);
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.32)";
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
+  // ---- signature ------------------------------------------------------------
+  const avatarSize = 44;
+  const avatarY = 1258;
+  const footBaseline = avatarY + 29;
   ctx.save();
   ctx.beginPath();
-  ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+  ctx.arc(MARGIN + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
   ctx.clip();
   if (avatar) {
-    drawCoverImage(ctx, avatar, avatarX, avatarY, avatarSize, avatarSize);
+    drawCoverImage(ctx, avatar, MARGIN, avatarY, avatarSize, avatarSize);
   } else {
-    ctx.fillStyle = "rgba(255,255,255,0.92)";
-    ctx.fillRect(avatarX, avatarY, avatarSize, avatarSize);
     ctx.fillStyle = INK;
-    ctx.font = `700 17px ${FONT}`;
+    ctx.fillRect(MARGIN, avatarY, avatarSize, avatarSize);
+    ctx.fillStyle = PAPER;
+    ctx.font = `700 18px ${SANS}`;
     ctx.textAlign = "center";
-    ctx.fillText(username.replace(/^@/, "").slice(0, 1).toUpperCase(), avatarX + avatarSize / 2, avatarY + 27);
+    ctx.fillText(username.replace(/^@/, "").slice(0, 1).toUpperCase(), MARGIN + avatarSize / 2, avatarY + 29);
+    ctx.textAlign = "left";
   }
   ctx.restore();
-  ctx.strokeStyle = "rgba(255,255,255,0.34)";
+  ctx.strokeStyle = "rgba(11,13,18,0.18)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 - 0.5, 0, Math.PI * 2);
+  ctx.arc(MARGIN + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 - 0.5, 0, Math.PI * 2);
   ctx.stroke();
-  ctx.textAlign = "left";
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
-  ctx.font = `700 17px ${FONT}`;
-  ctx.fillText(username, avatarX + avatarSize + 14, footY - 5);
+  ctx.fillStyle = INK;
+  ctx.font = `700 21px ${SANS}`;
+  ctx.fillText(username, MARGIN + avatarSize + 16, footBaseline);
+
   // bottom-right: creator-first Rubicon attribution
   const lead = "Creating on ";
-  ctx.font = `500 18px ${FONT}`;
+  ctx.font = `500 18px ${SANS}`;
   const leadW = ctx.measureText(lead).width;
-  ctx.font = `700 18px ${FONT}`;
+  ctx.font = `700 18px ${SANS}`;
   const brandW = ctx.measureText("Rubicon").width;
-  const startX = W - 64 - leadW - brandW;
-  ctx.fillStyle = "rgba(255,255,255,0.68)";
-  ctx.font = `500 18px ${FONT}`;
-  ctx.fillText(lead, startX, footY);
-  ctx.fillStyle = "#ffffff";
-  ctx.font = `700 18px ${FONT}`;
-  ctx.fillText("Rubicon", startX + leadW, footY);
+  const attributionX = RIGHT - leadW - brandW;
+  ctx.fillStyle = MUTED;
+  ctx.font = `500 18px ${SANS}`;
+  ctx.fillText(lead, attributionX, footBaseline);
+  ctx.fillStyle = INK;
+  ctx.font = `700 18px ${SANS}`;
+  ctx.fillText("Rubicon", attributionX + leadW, footBaseline);
 
   return canvas.toDataURL("image/png");
 }
 
-function drawExportMoneyChart(
+/**
+ * Resolves a next/font CSS variable (its hashed family names) into a stack the
+ * canvas 2d context can use, falling back when the variable isn't available.
+ */
+function resolveCanvasFontStack(cssVar: string, fallback: string) {
+  if (typeof window === "undefined") return fallback;
+  const families = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+  return families ? `${families}, ${fallback}` : fallback;
+}
+
+/**
+ * The 14-day trend as a scan strip: one thin stroke per day rising from a
+ * shared baseline — days agents paid read like marks on a scanned code, quiet
+ * days stay as countable notches, and the best day is picked out in white.
+ */
+function drawEarningsStrip(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   width: number,
   height: number,
   bars: TrendBar[],
-  blue: string,
+  colors: { paid: string; peak: string; rest: string; baseline: string; labels: string; mono: string },
 ) {
   const data = normalizeFourteenBars(bars);
   const max = Math.max(...data.map((bar) => bar.value), 0);
-  const labelGap = 30;
-  const barsH = height - labelGap;
-  const count = data.length;
-  const gap = 7;
-  const barW = (width - gap * (count - 1)) / count;
-  const radius = Math.min(4, barW / 2);
+  const peak = data.reduce((best, bar, i) => (bar.value > data[best].value ? i : best), 0);
+  const baseY = y + height;
+  const slot = width / data.length;
+  const strokeW = 7;
 
   data.forEach((bar, i) => {
-    if (bar.value <= 0 || max <= 0) return;
-    const barH = Math.max(4, (bar.value / max) * barsH);
-    const bx = x + i * (barW + gap);
-    const by = y + barsH - barH;
-    ctx.fillStyle = blue;
-    roundRect(ctx, bx, by, barW, barH, radius);
+    const bx = x + i * slot + (slot - strokeW) / 2;
+    if (bar.value <= 0 || max <= 0) {
+      ctx.fillStyle = colors.rest;
+      ctx.fillRect(bx, baseY - 5, strokeW, 5);
+      return;
+    }
+    const strokeH = Math.max(10, (bar.value / max) * height);
+    ctx.fillStyle = i === peak ? colors.peak : colors.paid;
+    roundRect(ctx, bx, baseY - strokeH, strokeW, strokeH, 3);
     ctx.fill();
   });
 
-  ctx.fillStyle = "#6b7280";
-  ctx.font = "600 11px \"Helvetica Neue\", Arial, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(data[0]?.label ?? "", x, y + height);
-  ctx.textAlign = "center";
-  ctx.fillText(data[Math.floor(data.length / 2)]?.label ?? "", x + width / 2, y + height);
+  ctx.strokeStyle = colors.baseline;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, baseY + 2);
+  ctx.lineTo(x + width, baseY + 2);
+  ctx.stroke();
+
+  ctx.fillStyle = colors.labels;
+  ctx.font = `700 12px ${colors.mono}`;
+  ctx.fillText(data[0]?.label ?? "", x, baseY + 28);
   ctx.textAlign = "right";
-  ctx.fillText(data[data.length - 1]?.label ?? "", x + width, y + height);
+  ctx.fillText(data[data.length - 1]?.label ?? "", x + width, baseY + 28);
   ctx.textAlign = "left";
 }
 
@@ -1246,86 +1200,6 @@ function drawCoverImage(
   const sourceX = (image.width - sourceW) / 2;
   const sourceY = (image.height - sourceH) / 2;
   ctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, x, y, width, height);
-}
-
-/**
- * Draws an image scaled to cover the target box, but heavily softened into a
- * frosted-glass backdrop. Rather than relying on `ctx.filter = "blur(...)"`
- * (which several browsers silently ignore for `drawImage`), it downsamples the
- * cover crop to a tiny offscreen canvas and upscales it with smoothing — a
- * cheap, reliable blur. A small `ctx.filter` pass on top, where supported,
- * smooths the bilinear upscale and desaturates for the glassy look.
- */
-function drawBlurredCover(
-  ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  { alpha = 1, saturate = 1 }: { alpha?: number; saturate?: number } = {},
-) {
-  // cover-fit crop math (matches drawCoverImage)
-  const coverScale = Math.max(width / image.width, height / image.height);
-  const sourceW = width / coverScale;
-  const sourceH = height / coverScale;
-  const sourceX = (image.width - sourceW) / 2;
-  const sourceY = (image.height - sourceH) / 2;
-
-  // Intermediate ~1/30 of the target width reproduces roughly a 30px blur once
-  // upscaled, smearing brushstrokes into soft glassy color fields.
-  const smallW = Math.max(2, Math.round(width / 30));
-  const smallH = Math.max(2, Math.round(height / 30));
-  const small = document.createElement("canvas");
-  small.width = smallW;
-  small.height = smallH;
-  const sctx = small.getContext("2d");
-  if (!sctx) {
-    drawCoverImage(ctx, image, x, y, width, height);
-    return;
-  }
-  sctx.imageSmoothingEnabled = true;
-  sctx.imageSmoothingQuality = "high";
-  sctx.drawImage(image, sourceX, sourceY, sourceW, sourceH, 0, 0, smallW, smallH);
-
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
-  ctx.filter = `blur(8px) saturate(${saturate})`;
-  ctx.drawImage(small, 0, 0, smallW, smallH, x, y, width, height);
-  ctx.restore();
-}
-
-function drawTintedImage(
-  ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  color: string,
-  alpha: number,
-  source?: { x: number; y: number; width: number; height: number },
-) {
-  const buffer = document.createElement("canvas");
-  buffer.width = Math.max(1, Math.round(width * 2));
-  buffer.height = Math.max(1, Math.round(height * 2));
-  const bufferCtx = buffer.getContext("2d");
-  if (!bufferCtx) return;
-  bufferCtx.scale(2, 2);
-  if (source) {
-    bufferCtx.drawImage(image, source.x, source.y, source.width, source.height, 0, 0, width, height);
-  } else {
-    bufferCtx.drawImage(image, 0, 0, width, height);
-  }
-  bufferCtx.globalCompositeOperation = "source-in";
-  bufferCtx.fillStyle = color;
-  bufferCtx.fillRect(0, 0, width, height);
-  ctx.save();
-  ctx.globalAlpha = alpha;
-  ctx.drawImage(buffer, x, y, width, height);
-  ctx.restore();
 }
 
 /**
