@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, Loader2, Mail, MousePointer2, PenLine, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { parseSubstackSubdomain } from "@/lib/import/substack-subdomain";
 import { detectImportSource } from "@/lib/import/detect";
 import { ONBOARDING_PLATFORM_CHOICES, OTHER_IMPORT_GROUP, type OnboardingPlatformId } from "@/lib/import/options";
@@ -23,6 +24,9 @@ const SUBDOMAIN_KEY = "rubicon-substack-subdomain";
 const LEGACY_USERNAME_KEY = "rubicon-substack-username";
 
 const IMPORT_EMAIL = "micacao15@gmail.com";
+/** The suggestion dropdowns render inside the scrollable card, so they can't
+ * scroll internally — cap the list length instead of the height. */
+const MAX_SUGGESTIONS = 5;
 const PRICE_MIN = 0.0001;
 const PRICE_SLIDER_MAX = 1;
 const PRICE_STEP = 0.0001;
@@ -138,6 +142,7 @@ export function SubstackOnboardingDialog({
   const client = useRubiconClient();
   const { getAccessToken } = usePrivy();
   const reduceMotion = useReducedMotion();
+  const [portalReady, setPortalReady] = useState(false);
   const [open, setOpen] = useState(() => {
     if (!shouldOpen) return false;
     if (forceOpen || demo) return true;
@@ -208,6 +213,33 @@ export function SubstackOnboardingDialog({
 
   const [demoPressing, setDemoPressing] = useState(false);
   const navigatingRef = useRef(false);
+
+  useEffect(() => setPortalReady(true), []);
+
+  // The onboarding experience owns the viewport while open. Render it outside
+  // the dashboard grid, freeze document scrolling, and make the underlying
+  // dashboard inert so there is only one visible/interactive page.
+  useEffect(() => {
+    if (!open || !portalReady) return;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const dashboardRoot = document.querySelector<HTMLElement>("[data-dashboard-root]");
+    const previousAriaHidden = dashboardRoot?.getAttribute("aria-hidden") ?? null;
+    const wasInert = dashboardRoot?.hasAttribute("inert") ?? false;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    dashboardRoot?.setAttribute("inert", "");
+    dashboardRoot?.setAttribute("aria-hidden", "true");
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      if (dashboardRoot) {
+        if (!wasInert) dashboardRoot.removeAttribute("inert");
+        if (previousAriaHidden === null) dashboardRoot.removeAttribute("aria-hidden");
+        else dashboardRoot.setAttribute("aria-hidden", previousAriaHidden);
+      }
+    };
+  }, [open, portalReady]);
 
   useEffect(() => {
     const seen = window.localStorage.getItem(SEEN_KEY) === "1";
@@ -357,7 +389,7 @@ export function SubstackOnboardingDialog({
         const response = await fetch(`/api/substack/search?query=${encodeURIComponent(query)}`, { signal: controller.signal });
         const body = await response.json().catch(() => null) as { suggestions?: Suggestion[] } | null;
         if (controller.signal.aborted) return;
-        const rows = body?.suggestions ?? [];
+        const rows = (body?.suggestions ?? []).slice(0, MAX_SUGGESTIONS);
         setSuggestions(rows);
         setSuggestionsOpen(rows.length > 0);
         setActiveSuggestion(-1);
@@ -386,7 +418,7 @@ export function SubstackOnboardingDialog({
         const response = await fetch(`/api/artemis/search?query=${encodeURIComponent(query)}`, { signal: controller.signal });
         const body = await response.json().catch(() => null) as { suggestions?: ArtemisProfile[] } | null;
         if (controller.signal.aborted) return;
-        const rows = body?.suggestions ?? [];
+        const rows = (body?.suggestions ?? []).slice(0, MAX_SUGGESTIONS);
         setArtemisSuggestions(rows);
         setArtemisSuggestionsOpen(rows.length > 0);
         setArtemisActiveSuggestion(-1);
@@ -645,6 +677,11 @@ export function SubstackOnboardingDialog({
     setGoingLive(true);
     setPriceError(null);
     try {
+      // Substack creates the creator row during its connect step. Artemis has
+      // no equivalent connect request, so guarantee the FK owner exists before
+      // the server inserts articles for a newly authenticated writer.
+      if (!client) throw new Error("Could not prepare your creator account. Refresh and try again.");
+      await client.getCreator();
       const token = await getAccessToken();
       const isArtemis = archive.source === "artemis";
       const response = await fetch(isArtemis ? "/api/artemis/commit" : "/api/import/substack/commit", {
@@ -710,7 +747,7 @@ export function SubstackOnboardingDialog({
 
   const settingsUrl = subdomain ? `https://${subdomain}.substack.com/publish/settings#import-export-settings` : null;
   const mailtoHref = `mailto:${IMPORT_EMAIL}?subject=${encodeURIComponent(`Rubicon import — ${subdomain ?? ""}`)}&body=${encodeURIComponent("Attach your Substack export ZIP here, or forward the export email from Substack to this address.")}`;
-  const cardClass = "relative z-10 w-full rounded-lg border border-black/[0.06] bg-white p-8 max-sm:max-w-none max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-5 max-sm:py-7";
+  const cardClass = "relative z-10 w-full max-h-[calc(100dvh-0.5rem)] overflow-y-auto overscroll-contain rounded-lg border border-black/[0.06] bg-white p-8 max-sm:max-h-dvh max-sm:max-w-none max-sm:rounded-b-none max-sm:border-x-0 max-sm:border-b-0 max-sm:px-5 max-sm:py-7";
   const sliderValue = priceToSliderValue(price);
   const sliderPercent = ((sliderValue - PRICE_SLIDER_MIN_EXPONENT) / (PRICE_SLIDER_MAX_EXPONENT - PRICE_SLIDER_MIN_EXPONENT)) * 100;
   const recommendedPrice = archive && archive.recommendedPriceUsd > 0 ? snapPrice(archive.recommendedPriceUsd) : null;
@@ -727,9 +764,9 @@ export function SubstackOnboardingDialog({
     ? selectedPosts.filter((post) => Math.abs(effectivePostPrice(post.id) - (isFree ? 0 : price)) > 1e-9).length
     : 0;
 
-  return (
+  const onboardingPage = (
     <div
-      className="fixed inset-0 z-50 grid items-center justify-items-center overflow-y-auto bg-white p-5 max-sm:items-end max-sm:justify-items-stretch max-sm:p-0"
+      className="dashboard-theme fixed inset-0 z-50 isolate grid h-dvh items-center justify-items-center overflow-hidden bg-white p-1 max-sm:items-end max-sm:justify-items-stretch max-sm:p-0"
       role="presentation"
       // Machine-readable step marker for browser agents; the welcome splash
       // auto-advances, so only the three actionable steps are announced.
@@ -782,7 +819,9 @@ export function SubstackOnboardingDialog({
             transition={{ duration: reduceMotion ? 0.01 : 0.35, ease: EASE_OUT }}
           >
             <div className="text-center">
-              <p className="text-xs font-medium text-[var(--quiet)]">Step 1 of 4</p>
+              <p className="text-xs font-medium text-[var(--quiet)]">
+                Step 1{platform ? ` of ${platform === "artemis" ? 3 : 4}` : ""}
+              </p>
               <h1 id="writing-platform-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Where do you mostly write?</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">We’ll tailor the import to your platform.</p>
             </div>
@@ -935,7 +974,7 @@ export function SubstackOnboardingDialog({
                 <ul
                   id="substack-suggestions"
                   role="listbox"
-                  className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-72 overflow-y-auto rounded-lg border border-[var(--line)] bg-white py-1"
+                  className="absolute left-0 right-0 top-full z-30 mt-1.5 rounded-lg border border-[var(--line)] bg-white py-1"
                 >
                   {suggestions.map((suggestion, index) => (
                     <li key={suggestion.subdomain} role="option" aria-selected={index === activeSuggestion}>
@@ -1025,7 +1064,7 @@ export function SubstackOnboardingDialog({
               <ArrowLeft size={15} />
             </button>
             <div className="text-center">
-              <p className="text-xs font-medium text-[var(--quiet)]">Step 2 of 2</p>
+              <p className="text-xs font-medium text-[var(--quiet)]">Step 2 of 3</p>
               <h1 id="artemis-onboarding-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Import from Artemis</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">Find your Artemis profile to import its published articles, or paste one article link.</p>
             </div>
@@ -1090,7 +1129,7 @@ export function SubstackOnboardingDialog({
                   <ul
                     id="artemis-suggestions"
                     role="listbox"
-                    className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-72 overflow-y-auto rounded-lg border border-[var(--line)] bg-white py-1"
+                    className="absolute left-0 right-0 top-full z-30 mt-1.5 rounded-lg border border-[var(--line)] bg-white py-1"
                   >
                     {artemisSuggestions.map((suggestion, index) => (
                       <li key={suggestion.handle} role="option" aria-selected={index === artemisActiveSuggestion}>
@@ -1287,7 +1326,9 @@ export function SubstackOnboardingDialog({
               <ArrowLeft size={15} />
             </button>
             <div className="text-center">
-              <p className="text-xs font-medium text-[var(--quiet)]">Step 4 of 4</p>
+              <p className="text-xs font-medium text-[var(--quiet)]">
+                {archive.source === "artemis" ? "Step 3 of 3" : "Step 4 of 4"}
+              </p>
               <h1 id="substack-price-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Set your price</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">Choose what goes live, then set one price or fine-tune each post.</p>
             </div>
@@ -1490,6 +1531,9 @@ export function SubstackOnboardingDialog({
       </AnimatePresence>
     </div>
   );
+
+  if (!portalReady) return <OnboardingEntryScreen />;
+  return createPortal(onboardingPage, document.body);
 }
 
 /** POSTs the export ZIP with real upload progress (fetch cannot report it). */

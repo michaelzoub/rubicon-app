@@ -9,7 +9,7 @@ description: Concise orientation map for important Rubicon app routes, architect
 
 - `app/page.tsx`: public landing page.
 - `app/dashboard/layout.tsx` and `app/dashboard/_components/shell.tsx`: authenticated creator dashboard shell.
-- `app/dashboard/_components/substack-onboarding-dialog.tsx`: first-run platform selection plus Substack and Artemis onboarding/pricing flows.
+- `app/dashboard/_components/substack-onboarding-dialog.tsx`: first-run platform selection plus Substack and Artemis onboarding/pricing flows; renders through a body portal and owns document scroll while open.
 - `app/dashboard/articles/new/page.tsx`: new article and URL-import review/publish flow.
 - `app/dashboard/imports/[draftId]/page.tsx`: extension-import draft review.
 

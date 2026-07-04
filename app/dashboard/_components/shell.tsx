@@ -200,6 +200,7 @@ export function DashboardFrame({
 
   return (
     <div
+      data-dashboard-root
       className={`dashboard-theme dashboard-canvas min-h-screen bg-[var(--surface-muted)] lg:grid ${
         sidebarOpen ? "lg:grid-cols-[208px_1fr]" : "lg:grid-cols-[56px_1fr]"
       }`}

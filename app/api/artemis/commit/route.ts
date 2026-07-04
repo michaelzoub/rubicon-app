@@ -117,6 +117,13 @@ export async function POST(request: Request) {
         }
       }
       if (articleError) {
+        if (articleError.code === "23503") {
+          throw new ImportServerError(
+            409,
+            "creator_not_ready",
+            "Your creator account was not ready yet. Refresh the dashboard and try publishing again.",
+          );
+        }
         throw new ImportServerError(500, "article_create_failed", "Could not publish the Artemis articles.");
       }
     }
