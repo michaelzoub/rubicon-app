@@ -24,9 +24,6 @@ const SUBDOMAIN_KEY = "rubicon-substack-subdomain";
 const LEGACY_USERNAME_KEY = "rubicon-substack-username";
 
 const IMPORT_EMAIL = "micacao15@gmail.com";
-/** The suggestion dropdowns render inside the scrollable card, so they can't
- * scroll internally — cap the list length instead of the height. */
-const MAX_SUGGESTIONS = 5;
 const PRICE_MIN = 0.0001;
 const PRICE_SLIDER_MAX = 1;
 const PRICE_STEP = 0.0001;
@@ -47,6 +44,43 @@ function priceToSliderValue(usd: number): number {
 
 function sliderValueToPrice(value: number): number {
   return snapPrice(10 ** value);
+}
+
+/** Tracks an anchor's viewport position so a suggestion list can be portaled
+ * to document.body — the onboarding card scrolls internally, and a dropdown
+ * positioned relative to it would be clipped by (or scroll along with) that
+ * container instead of floating freely below the input. */
+function useAnchorRect(anchorRef: React.RefObject<HTMLElement | null>, isOpen: boolean) {
+  const [rect, setRect] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setRect(null);
+      return;
+    }
+    const update = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const box = el.getBoundingClientRect();
+      const top = box.bottom + 6;
+      // Fill whatever room is left to the bottom of the viewport (with a
+      // small margin) instead of a fixed row count, so a tall screen shows
+      // more suggestions and a short one shows fewer.
+      const maxHeight = Math.max(120, window.innerHeight - top - 16);
+      setRect({ top, left: box.left, width: box.width, maxHeight });
+    };
+    update();
+    window.addEventListener("resize", update);
+    // capture:true catches scrolling inside the onboarding card, which
+    // doesn't bubble a scroll event to window otherwise.
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [anchorRef, isOpen]);
+
+  return rect;
 }
 
 type Step = "welcome" | "platform" | "connect" | "artemis" | "import" | "price" | "success";
@@ -163,6 +197,8 @@ export function SubstackOnboardingDialog({
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [activeSuggestion, setActiveSuggestion] = useState(-1);
   const searchAbortRef = useRef<AbortController | null>(null);
+  const connectFieldRef = useRef<HTMLDivElement>(null);
+  const suggestionsRect = useAnchorRect(connectFieldRef, suggestionsOpen && suggestions.length > 0);
   /** Set when a suggestion is picked so the resulting input change doesn't reopen the dropdown. */
   const skipSearchRef = useRef(false);
 
@@ -177,7 +213,10 @@ export function SubstackOnboardingDialog({
   const [artemisLoadingArticles, setArtemisLoadingArticles] = useState(false);
   const [artemisPending, setArtemisPending] = useState(false);
   const [artemisError, setArtemisError] = useState<string | null>(null);
+  const [artemisChecking, setArtemisChecking] = useState(false);
   const artemisSearchAbortRef = useRef<AbortController | null>(null);
+  const artemisFieldRef = useRef<HTMLDivElement>(null);
+  const artemisSuggestionsRect = useAnchorRect(artemisFieldRef, artemisSuggestionsOpen && artemisSuggestions.length > 0);
 
   // Step 3 — import archive
   const [subdomain, setSubdomain] = useState<string | null>(null);
@@ -389,7 +428,7 @@ export function SubstackOnboardingDialog({
         const response = await fetch(`/api/substack/search?query=${encodeURIComponent(query)}`, { signal: controller.signal });
         const body = await response.json().catch(() => null) as { suggestions?: Suggestion[] } | null;
         if (controller.signal.aborted) return;
-        const rows = (body?.suggestions ?? []).slice(0, MAX_SUGGESTIONS);
+        const rows = body?.suggestions ?? [];
         setSuggestions(rows);
         setSuggestionsOpen(rows.length > 0);
         setActiveSuggestion(-1);
@@ -408,8 +447,10 @@ export function SubstackOnboardingDialog({
     if (query.length < 2 || /[/]/.test(query) || /\./.test(query)) {
       setArtemisSuggestions([]);
       setArtemisSuggestionsOpen(false);
+      setArtemisChecking(false);
       return;
     }
+    setArtemisChecking(true);
     const timer = window.setTimeout(async () => {
       artemisSearchAbortRef.current?.abort();
       const controller = new AbortController();
@@ -418,12 +459,15 @@ export function SubstackOnboardingDialog({
         const response = await fetch(`/api/artemis/search?query=${encodeURIComponent(query)}`, { signal: controller.signal });
         const body = await response.json().catch(() => null) as { suggestions?: ArtemisProfile[] } | null;
         if (controller.signal.aborted) return;
-        const rows = (body?.suggestions ?? []).slice(0, MAX_SUGGESTIONS);
+        const rows = body?.suggestions ?? [];
         setArtemisSuggestions(rows);
         setArtemisSuggestionsOpen(rows.length > 0);
         setArtemisActiveSuggestion(-1);
-      } catch {
-        // Suggestions are best-effort; pasting a link always works.
+        setArtemisChecking(false);
+      } catch (cause) {
+        // Suggestions are best-effort; pasting a link always works. A
+        // superseded request's abort must not clear the newer one's spinner.
+        if (!(cause instanceof DOMException && cause.name === "AbortError")) setArtemisChecking(false);
       }
     }, 250);
     return () => window.clearTimeout(timer);
@@ -914,7 +958,7 @@ export function SubstackOnboardingDialog({
               <p className="mt-2 text-sm text-[var(--muted)]">Type your profile or publication name, or paste its link.</p>
             </div>
 
-            <div className="relative mt-7">
+            <div className="relative mt-7" ref={connectFieldRef}>
               <label htmlFor="substack-publication-input" className="sr-only">
                 Substack profile or publication name or link
               </label>
@@ -970,11 +1014,12 @@ export function SubstackOnboardingDialog({
                   <span className="text-[var(--quiet)]">.substack.com</span>
                 </span>
               )}
-              {suggestionsOpen && suggestions.length > 0 && (
+              {suggestionsOpen && suggestions.length > 0 && suggestionsRect && createPortal(
                 <ul
                   id="substack-suggestions"
                   role="listbox"
-                  className="absolute left-0 right-0 top-full z-30 mt-1.5 rounded-lg border border-[var(--line)] bg-white py-1"
+                  style={{ position: "fixed", top: suggestionsRect.top, left: suggestionsRect.left, width: suggestionsRect.width, maxHeight: suggestionsRect.maxHeight }}
+                  className="dashboard-theme z-[60] overflow-y-auto rounded-lg border border-[var(--line)] bg-white py-1 shadow-lg"
                 >
                   {suggestions.map((suggestion, index) => (
                     <li key={suggestion.subdomain} role="option" aria-selected={index === activeSuggestion}>
@@ -998,12 +1043,17 @@ export function SubstackOnboardingDialog({
                       </button>
                     </li>
                   ))}
-                </ul>
+                </ul>,
+                document.body
               )}
             </div>
 
             <div id="substack-lookup-feedback" className="mt-3 min-h-10 text-sm leading-5" role="status" aria-live="polite">
-              {lookup.status === "checking" && <span className="text-[var(--quiet)]">Checking…</span>}
+              {lookup.status === "checking" && (
+                <span className="inline-flex items-center gap-1.5 text-[var(--quiet)]">
+                  <Loader2 size={13} className="animate-spin" aria-hidden="true" /> Checking…
+                </span>
+              )}
               {lookup.status === "found" && lookup.subdomain && (
                 <span className="inline-flex items-start gap-1.5 text-[#165c3e]">
                   <Check size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -1070,7 +1120,7 @@ export function SubstackOnboardingDialog({
             </div>
 
             {!artemisProfile ? (
-              <div className="relative mt-7">
+              <div className="relative mt-7" ref={artemisFieldRef}>
                 <label htmlFor="artemis-search-input" className="sr-only">
                   Artemis writer name, handle, or article link
                 </label>
@@ -1125,11 +1175,12 @@ export function SubstackOnboardingDialog({
                   aria-controls="artemis-suggestions"
                   aria-describedby="artemis-feedback"
                 />
-                {artemisSuggestionsOpen && artemisSuggestions.length > 0 && (
+                {artemisSuggestionsOpen && artemisSuggestions.length > 0 && artemisSuggestionsRect && createPortal(
                   <ul
                     id="artemis-suggestions"
                     role="listbox"
-                    className="absolute left-0 right-0 top-full z-30 mt-1.5 rounded-lg border border-[var(--line)] bg-white py-1"
+                    style={{ position: "fixed", top: artemisSuggestionsRect.top, left: artemisSuggestionsRect.left, width: artemisSuggestionsRect.width, maxHeight: artemisSuggestionsRect.maxHeight }}
+                    className="dashboard-theme z-[60] overflow-y-auto rounded-lg border border-[var(--line)] bg-white py-1 shadow-lg"
                   >
                     {artemisSuggestions.map((suggestion, index) => (
                       <li key={suggestion.handle} role="option" aria-selected={index === artemisActiveSuggestion}>
@@ -1150,31 +1201,31 @@ export function SubstackOnboardingDialog({
                         </button>
                       </li>
                     ))}
-                  </ul>
+                  </ul>,
+                  document.body
                 )}
               </div>
             ) : (
-              <div className="mt-7 flex items-center gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
+              <div className="mt-7 flex items-center gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3" aria-busy={artemisLoadingArticles}>
                 <SubstackSuggestionLogo src={artemisProfile.avatarUrl} name={artemisProfile.name} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{artemisProfile.name}</span>
                   <span className="mono block truncate text-xs text-[var(--muted)]">@{artemisProfile.handle}</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={changeArtemisProfile}
-                  className="shrink-0 text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
-                >
-                  Change
-                </button>
-              </div>
-            )}
-
-            {artemisProfile && artemisLoadingArticles && (
-              <div className="mt-3 grid place-items-center rounded-lg bg-[var(--surface-muted)] p-6" role="status">
-                <span className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
-                  <Loader2 size={15} className="animate-spin" aria-hidden="true" /> Loading articles…
-                </span>
+                {artemisLoadingArticles ? (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-[var(--muted)]" role="status">
+                    <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                    <span className="sr-only">Loading articles…</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={changeArtemisProfile}
+                    className="shrink-0 text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+                  >
+                    Change
+                  </button>
+                )}
               </div>
             )}
 
@@ -1185,6 +1236,11 @@ export function SubstackOnboardingDialog({
             )}
 
             <div id="artemis-feedback" className="mt-3 min-h-6 text-sm leading-5" role="status" aria-live="polite">
+              {!artemisProfile && artemisChecking && !artemisUrlDetected && !artemisError && (
+                <span className="inline-flex items-center gap-1.5 text-[var(--quiet)]">
+                  <Loader2 size={13} className="animate-spin" aria-hidden="true" /> Checking…
+                </span>
+              )}
               {!artemisProfile && artemisUrlDetected && !artemisError && (
                 <span className="inline-flex items-start gap-1.5 text-[#165c3e]">
                   <Check size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
