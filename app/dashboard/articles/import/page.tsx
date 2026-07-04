@@ -17,6 +17,7 @@ const inputClass =
 const sourceLabels: Record<string, string> = {
   substack: "Substack post detected",
   x: "X / Twitter post detected",
+  artemis: "Artemis article detected",
 };
 
 export default function ImportFromUrlPage() {
@@ -82,7 +83,7 @@ export default function ImportFromUrlPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && canSubmit) runImport();
               }}
-              placeholder="https://author.substack.com/p/your-post  or  https://x.com/handle/status/123"
+              placeholder="https://author.substack.com/p/your-post  or  https://artemis.ai/you/article/123"
               className={`${inputClass} bg-transparent`}
               inputMode="url"
               autoFocus
@@ -96,8 +97,8 @@ export default function ImportFromUrlPage() {
               <span className="text-[#165c3e]">{sourceLabels[detected]}</span>
             ) : (
               <span className="text-[var(--muted)]">
-                Paste a full Substack (<code className="mono">/p/…</code>) or X (
-                <code className="mono">/status/…</code>) post URL.
+                Paste a full Substack (<code className="mono">/p/…</code>), Artemis (
+                <code className="mono">/article/…</code>), or X (<code className="mono">/status/…</code>) post URL.
               </span>
             )}
           </p>
@@ -139,6 +140,10 @@ export default function ImportFromUrlPage() {
             Paywalled Substack posts import the public preview only — you'll be prompted to paste the
             gated body before publishing.
           </li>
+          <li>
+            Artemis articles import in full from Artemis's public article data — headings, lists,
+            links, and image captions arrive as clean Markdown; interactive charts become text notes.
+          </li>
           <li>X posts import the public text and media metadata. Nothing is published automatically.</li>
         </ul>
       </Card>
@@ -151,7 +156,7 @@ function messageForError(status: number, code?: string, message?: string): strin
     case "invalid_url":
       return message || "That doesn't look like a valid URL.";
     case "unsupported_source":
-      return "We can only import from Substack or X/Twitter URLs right now.";
+      return "We can only import from Substack, Artemis, or X/Twitter URLs right now.";
     case "blocked_url":
       return "That URL can't be imported for security reasons.";
     case "rate_limited":

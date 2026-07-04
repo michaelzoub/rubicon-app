@@ -9,12 +9,13 @@ import { detectImportSource, parseImportUrl } from "./detect";
 import { ImportError, ImportResult, ImporterDeps } from "./types";
 import { importSubstack } from "./importers/substackImporter";
 import { importX } from "./importers/xImporter";
+import { importArtemis } from "./importers/artemisImporter";
 
 export { detectImportSource } from "./detect";
 export { ImportError } from "./types";
 export type { ImportResult } from "./types";
 
-/** Fetch and normalize a Substack or X URL into a Rubicon draft payload. */
+/** Fetch and normalize a Substack, Artemis, or X URL into a Rubicon draft payload. */
 export async function importFromUrl(rawUrl: string, deps?: ImporterDeps): Promise<ImportResult> {
   // Validate up front so a bad URL fails fast with a clear code.
   parseImportUrl(rawUrl);
@@ -25,10 +26,12 @@ export async function importFromUrl(rawUrl: string, deps?: ImporterDeps): Promis
       return importSubstack(rawUrl, deps);
     case "x":
       return importX(rawUrl, deps);
+    case "artemis":
+      return importArtemis(rawUrl, deps);
     default:
       throw new ImportError(
         "unsupported_source",
-        "We can only import from Substack or X/Twitter URLs right now.",
+        "We can only import from Substack, Artemis, or X/Twitter URLs right now.",
       );
   }
 }

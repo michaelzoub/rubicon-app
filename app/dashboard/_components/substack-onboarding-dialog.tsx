@@ -8,6 +8,10 @@ import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, Load
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { parseSubstackSubdomain } from "@/lib/import/substack-subdomain";
+import { detectImportSource } from "@/lib/import/detect";
+import { ONBOARDING_PLATFORM_CHOICES, OTHER_IMPORT_GROUP, type OnboardingPlatformId } from "@/lib/import/options";
+import type { ImportResult } from "@/lib/import/types";
+import { stashImport } from "@/app/dashboard/articles/_import-handoff";
 import { useRubiconClient } from "@/lib/rubicon/auth";
 import { SubstackSuggestionLogo } from "./substack-suggestion-logo";
 
@@ -41,16 +45,13 @@ function sliderValueToPrice(value: number): number {
   return snapPrice(10 ** value);
 }
 
-type Step = "welcome" | "platform" | "connect" | "import" | "price" | "success";
+type Step = "welcome" | "platform" | "connect" | "artemis" | "import" | "price" | "success";
 
-/** Platforms offered on the "where do you mostly write" step. Only Substack
- * has an import flow today; picking anything else exits to the dashboard. */
-const WRITING_PLATFORMS = [
-  { id: "substack", label: "Substack", logoSrc: "/substacklogo.png" },
-  { id: "other", label: "Other", logoSrc: null },
-] as const;
-
-type PlatformId = (typeof WRITING_PLATFORMS)[number]["id"];
+// The "where do you mostly write" tiles come from lib/import/options — the
+// shared source of truth for import options across onboarding and the compose
+// screen. Substack runs the archive flow, Artemis imports by article URL, and
+// "Other" offers the generic URL/Markdown paths.
+type PlatformId = OnboardingPlatformId;
 
 interface LookupState {
   status: "idle" | "checking" | "found" | "missing";
@@ -71,10 +72,29 @@ interface ArchivePost {
   id: string;
   title: string;
   wordCount: number;
+  url?: string;
+}
+
+interface ArtemisProfile {
+  handle: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+interface ArtemisArticleSummary {
+  shortId: string;
+  title: string;
+  subtitle: string | null;
+  wordCount: number;
+  publishedAt: string | null;
+  url: string;
 }
 
 interface ArchiveStats {
   jobId: string;
+  source: "substack" | "artemis";
+  authorHandle?: string;
+  authorName?: string;
   postCount: number;
   totalWordCount: number;
   averageWordCount: number;
@@ -140,6 +160,19 @@ export function SubstackOnboardingDialog({
   const searchAbortRef = useRef<AbortController | null>(null);
   /** Set when a suggestion is picked so the resulting input change doesn't reopen the dropdown. */
   const skipSearchRef = useRef(false);
+
+  // Artemis path — selecting a writer loads their archive into the shared
+  // pricing step. Pasting one article link keeps the one-off draft flow.
+  const [artemisInput, setArtemisInput] = useState("");
+  const [artemisSuggestions, setArtemisSuggestions] = useState<ArtemisProfile[]>([]);
+  const [artemisSuggestionsOpen, setArtemisSuggestionsOpen] = useState(false);
+  const [artemisActiveSuggestion, setArtemisActiveSuggestion] = useState(-1);
+  const [artemisProfile, setArtemisProfile] = useState<ArtemisProfile | null>(null);
+  const [artemisArticles, setArtemisArticles] = useState<ArtemisArticleSummary[] | null>(null);
+  const [artemisLoadingArticles, setArtemisLoadingArticles] = useState(false);
+  const [artemisPending, setArtemisPending] = useState(false);
+  const [artemisError, setArtemisError] = useState<string | null>(null);
+  const artemisSearchAbortRef = useRef<AbortController | null>(null);
 
   // Step 3 — import archive
   const [subdomain, setSubdomain] = useState<string | null>(null);
@@ -335,6 +368,35 @@ export function SubstackOnboardingDialog({
     return () => window.clearTimeout(timer);
   }, [demo, input, open, step]);
 
+  // Artemis writer typeahead. A pasted link or anything URL-shaped skips the
+  // search — the link itself already identifies the article.
+  useEffect(() => {
+    if (!open || step !== "artemis" || demo || artemisProfile) return;
+    const query = artemisInput.trim();
+    if (query.length < 2 || /[/]/.test(query) || /\./.test(query)) {
+      setArtemisSuggestions([]);
+      setArtemisSuggestionsOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      artemisSearchAbortRef.current?.abort();
+      const controller = new AbortController();
+      artemisSearchAbortRef.current = controller;
+      try {
+        const response = await fetch(`/api/artemis/search?query=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const body = await response.json().catch(() => null) as { suggestions?: ArtemisProfile[] } | null;
+        if (controller.signal.aborted) return;
+        const rows = body?.suggestions ?? [];
+        setArtemisSuggestions(rows);
+        setArtemisSuggestionsOpen(rows.length > 0);
+        setArtemisActiveSuggestion(-1);
+      } catch {
+        // Suggestions are best-effort; pasting a link always works.
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [artemisInput, artemisProfile, demo, open, step]);
+
   function chooseSuggestion(suggestion: Suggestion) {
     skipSearchRef.current = true;
     setInput(suggestion.subdomain);
@@ -346,11 +408,112 @@ export function SubstackOnboardingDialog({
     setLookup({ status: "found", subdomain: suggestion.subdomain, name: suggestion.name, logoUrl: suggestion.logoUrl });
   }
 
-  /** Step 1 → 2, or out to the dashboard for platforms we can't import yet. */
+  /** Step 1 → the platform's import flow, or out to the dashboard. */
   function continueFromPlatform() {
     if (!platform) return;
     if (platform === "substack") setStep("connect");
+    else if (platform === "artemis") setStep("artemis");
     else close();
+  }
+
+  /** Leave onboarding for one of the "Other" import flows. */
+  function exitToImportOption(href: string) {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+    window.localStorage.setItem(SEEN_KEY, "1");
+    router.push(href);
+  }
+
+  /** A pasted article link short-circuits the search → pick flow entirely. */
+  const artemisUrlDetected = detectImportSource(artemisInput.trim()) === "artemis";
+
+  /** Import an Artemis article URL, then hand off to the draft editor. */
+  async function importArtemisArticle(url: string) {
+    if (demo) return;
+    if (artemisPending || navigatingRef.current) return;
+    setArtemisPending(true);
+    setArtemisError(null);
+    try {
+      const response = await fetch("/api/import/url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const body = await response.json().catch(() => null) as
+        | (ImportResult & { error?: { message?: string } })
+        | null;
+      if (!response.ok || !body) {
+        throw new Error(body?.error?.message || "Couldn't import that Artemis article. Try again.");
+      }
+      // Same handoff as "Import from URL": nothing is saved or published until
+      // the writer reviews the draft in the editor.
+      stashImport(body);
+      window.localStorage.setItem(SEEN_KEY, "1");
+      navigatingRef.current = true;
+      router.push("/dashboard/articles/new?imported=1");
+    } catch (cause) {
+      setArtemisError(cause instanceof Error ? cause.message : "Couldn't import that Artemis article.");
+      setArtemisPending(false);
+    }
+  }
+
+  /** Select a writer, load every published article, then open bulk pricing. */
+  async function chooseArtemisProfile(profile: ArtemisProfile) {
+    setArtemisProfile(profile);
+    setArtemisSuggestions([]);
+    setArtemisSuggestionsOpen(false);
+    setArtemisActiveSuggestion(-1);
+    setArtemisArticles(null);
+    setArtemisError(null);
+    setArtemisLoadingArticles(true);
+    try {
+      const response = await fetch(`/api/artemis/articles?handle=${encodeURIComponent(profile.handle)}`);
+      const body = await response.json().catch(() => null) as
+        | { articles?: ArtemisArticleSummary[]; error?: { message?: string } }
+        | null;
+      if (!response.ok || !body?.articles) {
+        throw new Error(body?.error?.message || "Couldn't load articles from Artemis. Try again.");
+      }
+      setArtemisArticles(body.articles);
+      if (body.articles.length === 0) return;
+      const totalWordCount = body.articles.reduce((sum, article) => sum + article.wordCount, 0);
+      setArchive({
+        jobId: `artemis:${profile.handle}`,
+        source: "artemis",
+        authorHandle: profile.handle,
+        authorName: profile.name,
+        postCount: body.articles.length,
+        totalWordCount,
+        averageWordCount: Math.round(totalWordCount / body.articles.length),
+        recommendedPriceUsd: 0,
+        posts: body.articles.map((article) => ({
+          id: article.shortId,
+          title: article.title,
+          wordCount: article.wordCount,
+          url: article.url,
+        })),
+      });
+      setSelectedPostIds(body.articles.map((article) => article.shortId));
+      setPostPrices({});
+      setDrawerOpen(false);
+      setStep("price");
+    } catch (cause) {
+      setArtemisError(cause instanceof Error ? cause.message : "Couldn't load articles from Artemis.");
+      setArtemisProfile(null);
+    } finally {
+      setArtemisLoadingArticles(false);
+    }
+  }
+
+  /** Back from the article list to the writer search, keeping the query. */
+  function changeArtemisProfile() {
+    setArtemisProfile(null);
+    setArtemisArticles(null);
+    setArtemisError(null);
+  }
+
+  function submitArtemis() {
+    if (artemisUrlDetected) void importArtemisArticle(artemisInput.trim());
   }
 
   /** Step 3 → 2: re-choose the publication, prefilled so lookup re-verifies. */
@@ -364,6 +527,11 @@ export function SubstackOnboardingDialog({
   /** Step 4 → 3: swap in a different export ZIP. */
   function backToImport() {
     setPriceError(null);
+    if (archive?.source === "artemis") {
+      changeArtemisProfile();
+      setStep("artemis");
+      return;
+    }
     setUploadState({ phase: "idle" });
     setStep("import");
   }
@@ -419,6 +587,7 @@ export function SubstackOnboardingDialog({
       const weightedCents = importable.reduce((sum, row) => sum + Number(row.recommendedPricePerWordCents || 0) * Number(row.wordCount || 0), 0);
       setArchive({
         jobId: result.body.jobId,
+        source: "substack",
         postCount: importable.length,
         totalWordCount,
         averageWordCount: Math.round(totalWordCount / importable.length),
@@ -477,23 +646,34 @@ export function SubstackOnboardingDialog({
     setPriceError(null);
     try {
       const token = await getAccessToken();
-      const response = await fetch("/api/import/substack/commit", {
+      const isArtemis = archive.source === "artemis";
+      const response = await fetch(isArtemis ? "/api/artemis/commit" : "/api/import/substack/commit", {
         method: "POST",
         headers: { "content-type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({
-          jobId: archive.jobId,
-          substackUsername: subdomain,
-          // Per-post selections carry any drawer overrides; the global price is
-          // still persisted as the creator's default.
-          ...(archive.posts.length
-            ? { selections: archive.posts
+        body: JSON.stringify(isArtemis
+          ? {
+              handle: archive.authorHandle,
+              authorName: archive.authorName,
+              selections: archive.posts
                 .filter((post) => selectedPostIds.includes(post.id))
-                .map((post) => ({ id: post.id, pricePerWordCents: Number((effectivePostPrice(post.id) * 100).toFixed(4)) })) }
-            : { applyToAll: true }),
-          globalPricePerWordCents: Number(((isFree ? 0 : price) * 100).toFixed(4)),
-          accessMode: isFree ? "free" : "paid",
-          goLive: true,
-        }),
+                .map((post) => ({ id: post.id, url: post.url, pricePerWordCents: Number((effectivePostPrice(post.id) * 100).toFixed(4)) })),
+              globalPricePerWordCents: Number(((isFree ? 0 : price) * 100).toFixed(4)),
+              accessMode: isFree ? "free" : "paid",
+            }
+          : {
+              jobId: archive.jobId,
+              substackUsername: subdomain,
+              // Per-post selections carry any drawer overrides; the global price is
+              // still persisted as the creator's default.
+              ...(archive.posts.length
+                ? { selections: archive.posts
+                    .filter((post) => selectedPostIds.includes(post.id))
+                    .map((post) => ({ id: post.id, pricePerWordCents: Number((effectivePostPrice(post.id) * 100).toFixed(4)) })) }
+                : { applyToAll: true }),
+              globalPricePerWordCents: Number(((isFree ? 0 : price) * 100).toFixed(4)),
+              accessMode: isFree ? "free" : "paid",
+              goLive: true,
+            }),
       });
       const body = await response.json().catch(() => null) as { imported?: number; error?: { message?: string } } | null;
       if (!response.ok) throw new Error(body?.error?.message || "Could not publish your archive.");
@@ -607,8 +787,8 @@ export function SubstackOnboardingDialog({
               <p className="mt-2 text-sm text-[var(--muted)]">We’ll tailor the import to your platform.</p>
             </div>
 
-            <div className="mt-7 grid grid-cols-2 gap-3" role="radiogroup" aria-labelledby="writing-platform-title">
-              {WRITING_PLATFORMS.map((option) => (
+            <div className="mt-7 grid grid-cols-3 gap-3" role="radiogroup" aria-labelledby="writing-platform-title">
+              {ONBOARDING_PLATFORM_CHOICES.map((option) => (
                 <button
                   key={option.id}
                   type="button"
@@ -641,9 +821,22 @@ export function SubstackOnboardingDialog({
 
             <div className="mt-3 min-h-10 text-sm leading-5" role="status" aria-live="polite">
               {platform === "other" && (
-                <span className="text-[var(--muted)]">
-                  We’re starting with Substack — more platforms are coming soon. You can still explore your dashboard.
-                </span>
+                <div className="grid gap-2">
+                  <span className="font-medium">{OTHER_IMPORT_GROUP.heading}</span>
+                  <div className="flex flex-wrap gap-2">
+                    {OTHER_IMPORT_GROUP.options.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        data-testid={`other-import-${option.id}`}
+                        onClick={() => exitToImportOption(option.href)}
+                        className="button button-secondary text-sm"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -812,6 +1005,166 @@ export function SubstackOnboardingDialog({
                 {/* shared macOS cursor: white arrow, dark outline */}
                 <MousePointer2 size={20} fill="#ffffff" stroke="#16181d" strokeWidth={1.5} />
               </motion.span>
+            )}
+          </motion.section>
+        )}
+
+        {step === "artemis" && (
+          <motion.section
+            key="artemis"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="artemis-onboarding-title"
+            className={`${cardClass} max-w-md`}
+            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.01 : 0.35, ease: EASE_OUT }}
+          >
+            <button type="button" onClick={() => setStep("platform")} className="dashboard-icon-button absolute left-4 top-4" aria-label="Back to choose where you write">
+              <ArrowLeft size={15} />
+            </button>
+            <div className="text-center">
+              <p className="text-xs font-medium text-[var(--quiet)]">Step 2 of 2</p>
+              <h1 id="artemis-onboarding-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Import from Artemis</h1>
+              <p className="mt-2 text-sm text-[var(--muted)]">Find your Artemis profile to import its published articles, or paste one article link.</p>
+            </div>
+
+            {!artemisProfile ? (
+              <div className="relative mt-7">
+                <label htmlFor="artemis-search-input" className="sr-only">
+                  Artemis writer name, handle, or article link
+                </label>
+                <input
+                  id="artemis-search-input"
+                  data-testid="artemis-search-input"
+                  value={artemisInput}
+                  onChange={(event) => {
+                    setArtemisInput(event.target.value);
+                    if (artemisError) setArtemisError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (artemisSuggestionsOpen && artemisSuggestions.length > 0) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setArtemisActiveSuggestion((index) => (index + 1) % artemisSuggestions.length);
+                        return;
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setArtemisActiveSuggestion((index) => (index <= 0 ? artemisSuggestions.length - 1 : index - 1));
+                        return;
+                      }
+                      if (event.key === "Escape") {
+                        setArtemisSuggestionsOpen(false);
+                        return;
+                      }
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        // Enter picks the highlighted writer, or the only match.
+                        const pick = artemisActiveSuggestion >= 0
+                          ? artemisSuggestions[artemisActiveSuggestion]
+                          : artemisSuggestions.length === 1
+                            ? artemisSuggestions[0]
+                            : null;
+                        if (pick) void chooseArtemisProfile(pick);
+                        return;
+                      }
+                    }
+                    if (event.key === "Enter" && artemisUrlDetected) submitArtemis();
+                  }}
+                  onBlur={() => setArtemisSuggestionsOpen(false)}
+                  placeholder="Your name, @handle, or article link"
+                  className="h-12 w-full rounded-lg border border-transparent bg-[var(--surface-muted)] px-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[rgba(22,24,29,0.2)]"
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  role="combobox"
+                  aria-expanded={artemisSuggestionsOpen && artemisSuggestions.length > 0}
+                  aria-autocomplete="list"
+                  aria-controls="artemis-suggestions"
+                  aria-describedby="artemis-feedback"
+                />
+                {artemisSuggestionsOpen && artemisSuggestions.length > 0 && (
+                  <ul
+                    id="artemis-suggestions"
+                    role="listbox"
+                    className="absolute left-0 right-0 top-full z-30 mt-1.5 max-h-72 overflow-y-auto rounded-lg border border-[var(--line)] bg-white py-1"
+                  >
+                    {artemisSuggestions.map((suggestion, index) => (
+                      <li key={suggestion.handle} role="option" aria-selected={index === artemisActiveSuggestion}>
+                        <button
+                          type="button"
+                          // preventDefault keeps focus in the input so onBlur
+                          // doesn't close the list before the click lands.
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => void chooseArtemisProfile(suggestion)}
+                          onMouseEnter={() => setArtemisActiveSuggestion(index)}
+                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${index === artemisActiveSuggestion ? "bg-[var(--surface-muted)]" : ""}`}
+                        >
+                          <SubstackSuggestionLogo src={suggestion.avatarUrl} name={suggestion.name} />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{suggestion.name}</span>
+                            <span className="mono block truncate text-xs text-[var(--muted)]">@{suggestion.handle}</span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <div className="mt-7 flex items-center gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
+                <SubstackSuggestionLogo src={artemisProfile.avatarUrl} name={artemisProfile.name} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{artemisProfile.name}</span>
+                  <span className="mono block truncate text-xs text-[var(--muted)]">@{artemisProfile.handle}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={changeArtemisProfile}
+                  className="shrink-0 text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+                >
+                  Change
+                </button>
+              </div>
+            )}
+
+            {artemisProfile && artemisLoadingArticles && (
+              <div className="mt-3 grid place-items-center rounded-lg bg-[var(--surface-muted)] p-6" role="status">
+                <span className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
+                  <Loader2 size={15} className="animate-spin" aria-hidden="true" /> Loading articles…
+                </span>
+              </div>
+            )}
+
+            {artemisProfile && artemisArticles && artemisArticles.length === 0 && (
+              <p className="mt-3 rounded-lg bg-[var(--surface-muted)] p-5 text-center text-sm text-[var(--muted)]">
+                No published articles yet on this profile.
+              </p>
+            )}
+
+            <div id="artemis-feedback" className="mt-3 min-h-6 text-sm leading-5" role="status" aria-live="polite">
+              {!artemisProfile && artemisUrlDetected && !artemisError && (
+                <span className="inline-flex items-start gap-1.5 text-[#165c3e]">
+                  <Check size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>Artemis article link detected</span>
+                </span>
+              )}
+              {artemisError && <span role="alert" className="text-[#8d2f2d]">{artemisError}</span>}
+            </div>
+
+            {!artemisProfile && (
+              <button
+                type="button"
+                data-testid="artemis-import-button"
+                onClick={submitArtemis}
+                disabled={artemisPending || !artemisUrlDetected}
+                className="button button-primary mt-4 w-full justify-center py-3 disabled:opacity-40"
+              >
+                {artemisPending ? <><Loader2 size={16} className="animate-spin" /> Importing…</> : <>Import article <ArrowRight size={16} /></>}
+              </button>
             )}
           </motion.section>
         )}

@@ -1,10 +1,10 @@
 export const WRITER_OBJECTION_PROMPT_SEEN_KEY = "rubicon_writer_objection_prompt_seen";
 
 export const OBJECTION_OPTIONS = [
-  { value: "trust_and_pricing", label: "Me no trust agents pay / price confuse" },
-  { value: "wallet_and_setup", label: "Wallet + setup too much work" },
-  { value: "content_risk", label: "Scared to show my work" },
-  { value: "not_ready", label: "Just looking / wait for mainnet" },
+  { value: "trust_and_pricing", label: "Me no believe agents pay. Price confuse." },
+  { value: "wallet_and_setup", label: "Wallet and setup look like big work" },
+  { value: "content_risk", label: "Me scared to show my words" },
+  { value: "not_ready", label: "Me just look. Maybe wait for mainnet." },
 ] as const;
 
 export type WriterObjection = (typeof OBJECTION_OPTIONS)[number]["value"];

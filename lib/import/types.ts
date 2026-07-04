@@ -8,7 +8,7 @@
  */
 
 /** Platforms we can import from today. */
-export type ImportSource = "substack" | "x";
+export type ImportSource = "substack" | "x" | "artemis";
 
 /** Result of source detection — `"unsupported"` for anything we can't import. */
 export type DetectedSource = ImportSource | "unsupported";

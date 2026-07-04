@@ -20,6 +20,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { usePrivyConfigured } from "../../providers";
 import { RubiconBrand } from "../../_components/rubicon-brand";
 import { OnboardingEntryScreen } from "./substack-onboarding-dialog";
+import { WriterAuthSubstackCard } from "./writer-auth-substack-card";
 import { DashboardPageSkeleton } from "./ui";
 import {
   hasSeenWriterObjectionPrompt,
@@ -104,17 +105,6 @@ export function WriterAuthScreen({ onLogin, demo = false }: { onLogin: () => voi
   return (
     <div className="writer-auth-screen">
       <div className="writer-auth-card">
-        <section className="writer-auth-story">
-          <RubiconBrand className="h-8" src="/w_logo.svg" />
-          <div>
-            <h1>Start earning when agents read your work</h1>
-            <p className="writer-auth-copy">
-              List one article, set a per-word price, and let agents pay for only the sections they need. Your full piece
-              stays private until words are paid for.
-            </p>
-          </div>
-          <div className="writer-auth-benefits mono">Private by default · 0% platform fee · Paid per word</div>
-        </section>
         <section className="writer-auth-panel" aria-label="Sign in">
           <button
             type="button"
@@ -171,6 +161,9 @@ export function WriterAuthScreen({ onLogin, demo = false }: { onLogin: () => voi
             )}
           </div>
           </div>
+        </section>
+        <section className="writer-auth-story">
+          <WriterAuthSubstackCard />
         </section>
       </div>
       <WriterObjectionDialog open={exitOpen} onClose={() => setExitOpen(false)} />

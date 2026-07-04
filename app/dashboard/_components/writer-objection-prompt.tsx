@@ -77,9 +77,9 @@ export function WriterObjectionDialog({ open, onClose }: { open: boolean; onClos
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="writer-objection-title" className="text-balance text-lg font-semibold tracking-[-0.01em] text-[#171717]">
-              Why no list article yet?
+              Why you no list article?
             </h2>
-            <p className="mt-1 text-pretty text-sm text-[#73757c]">Quick answer help us fix Rubicon.</p>
+            <p className="mt-1 text-pretty text-sm text-[#73757c]">Pick one. Help us make Rubicon good.</p>
             <div className="mt-4 grid gap-1" role="radiogroup" aria-label="Reason for leaving">
               {OBJECTION_OPTIONS.map((option) => (
                 <label

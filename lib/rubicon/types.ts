@@ -67,7 +67,7 @@ export interface ArticleUsage {
 }
 
 /** Platforms a draft can be imported from. Mirrors lib/import's ImportSource. */
-export type ArticleSourcePlatform = "substack" | "x";
+export type ArticleSourcePlatform = "substack" | "x" | "artemis";
 
 /**
  * Provenance for drafts created via "Import from URL". Persisted alongside the

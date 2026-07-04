@@ -23,6 +23,7 @@ import {
 import { parseSections } from "@/lib/rubicon/sections";
 import type { ArticleAccessMode, ArticleSourceInput, ArticleSectionInput } from "@/lib/rubicon/types";
 import { isStolenXContent, normalizeHandle } from "@/lib/articles/ownership";
+import { OTHER_IMPORT_GROUP, PLATFORM_IMPORT_OPTIONS } from "@/lib/import/options";
 import { MarkdownEditor } from "../../_components/markdown-editor";
 import { Card, formatDate, PageHeader, SafetyWarning, shortWallet, WalletStatePill } from "../../_components/ui";
 import { takeImport } from "../_import-handoff";
@@ -314,6 +315,7 @@ const inputClass =
 const SOURCE_LABELS: Record<ImportedSource["platform"], string> = {
   substack: "Substack",
   x: "X / Twitter",
+  artemis: "Artemis",
 };
 
 function ImportedSourceBanner({ source, partial }: { source: ImportedSource; partial: boolean }) {
@@ -440,19 +442,34 @@ function StepAddArticle({
         )}
 
         <section className="grid gap-3" aria-label="Import article">
-          <span className="text-sm font-semibold">Import an existing article</span>
+          <span className="text-sm font-semibold">{OTHER_IMPORT_GROUP.heading}</span>
           <div className="flex flex-wrap gap-2">
-            {!source && (
-              <Link href="/dashboard/articles/import" className="button button-primary text-sm">
-                <Link2 size={15} aria-hidden="true" /> Import URL
+            {PLATFORM_IMPORT_OPTIONS.map((option) => (
+              <Link key={option.id} href={option.href} className="button button-secondary text-sm">
+                {option.logoSrc && (
+                  <Image src={option.logoSrc} alt="" width={15} height={15} aria-hidden="true" />
+                )}{" "}
+                {option.label}
               </Link>
+            ))}
+            {OTHER_IMPORT_GROUP.options.map((option) =>
+              option.id === "markdown" ? (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="button button-secondary text-sm"
+                >
+                  <FileText size={15} aria-hidden="true" /> {option.label}
+                </button>
+              ) : (
+                !source && (
+                  <Link key={option.id} href={option.href} className="button button-primary text-sm">
+                    <Link2 size={15} aria-hidden="true" /> {option.label}
+                  </Link>
+                )
+              ),
             )}
-            <Link href="/dashboard/import/substack" className="button button-secondary text-sm">
-              <Image src="/substacklogo.png" alt="" width={15} height={15} aria-hidden="true" /> Import from Substack
-            </Link>
-            <button type="button" onClick={() => fileRef.current?.click()} className="button button-secondary text-sm">
-              <FileText size={15} aria-hidden="true" /> Import Markdown
-            </button>
             <a
               href="https://chromewebstore.google.com/detail/rubicon/allmdpfkdgdcjfgeijembjfpnkfpocab"
               target="_blank"

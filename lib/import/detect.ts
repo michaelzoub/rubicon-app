@@ -32,6 +32,7 @@ export function parseImportUrl(raw: string): URL {
  *    domain whose path looks like a Substack post (`/p/<slug>`).
  *  - X/Twitter: `x.com` / `twitter.com` (and `www.`/mobile subdomains) status
  *    URLs of the form `/<handle>/status/<id>`.
+ *  - Artemis: `artemis.ai` article URLs of the form `/<handle>/article/<shortId>`.
  */
 export function detectImportSource(raw: string): DetectedSource {
   let url: URL;
@@ -47,6 +48,10 @@ export function detectImportSource(raw: string): DetectedSource {
 
   const xHosts = new Set(["x.com", "twitter.com", "mobile.twitter.com", "mobile.x.com"]);
   if (xHosts.has(host) && /^\/[^/]+\/status(?:es)?\/\d+/.test(path)) return "x";
+
+  if ((host === "artemis.ai" || host.endsWith(".artemis.ai")) && /^\/[\w.-]+\/article\/\d+/.test(path)) {
+    return "artemis";
+  }
 
   // Custom domains that publish via Substack still expose `/p/<slug>` posts.
   if (/^\/p\/[\w-]+/.test(path)) return "substack";

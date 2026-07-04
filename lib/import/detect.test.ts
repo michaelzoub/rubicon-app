@@ -25,6 +25,13 @@ describe("detectImportSource", () => {
     expect(detectImportSource("https://mobile.twitter.com/jack/status/20")).toBe("x");
   });
 
+  it("detects Artemis article URLs", () => {
+    expect(detectImportSource("https://www.artemis.ai/dimefps/article/308072004776712725")).toBe("artemis");
+    expect(detectImportSource("https://artemis.ai/dimefps/article/308072004776712725?ref=x")).toBe("artemis");
+    expect(detectImportSource("https://www.artemis.ai/dimefps")).toBe("unsupported"); // profile, not an article
+    expect(detectImportSource("https://www.artemis.ai/dimefps/article/not-an-id")).toBe("unsupported");
+  });
+
   it("rejects unsupported and malformed URLs", () => {
     expect(detectImportSource("https://medium.com/@me/post-123")).toBe("unsupported");
     expect(detectImportSource("https://x.com/jack")).toBe("unsupported"); // profile, not a status

@@ -8,7 +8,7 @@
 
 alter table public.articles
   add column if not exists is_imported          boolean      not null default false,
-  add column if not exists source_platform      text,                 -- 'substack' | 'x'
+  add column if not exists source_platform      text,                 -- 'substack' | 'x' | 'artemis'
   add column if not exists source_url           text,
   add column if not exists source_author_name   text,
   add column if not exists source_author_handle text,
@@ -25,6 +25,6 @@ begin
   ) then
     alter table public.articles
       add constraint articles_source_platform_check
-      check (source_platform is null or source_platform in ('substack', 'x'));
+      check (source_platform is null or source_platform in ('substack', 'x', 'artemis'));
   end if;
 end $$;
