@@ -8,7 +8,7 @@
  * `id` to their own iconography.
  */
 
-export type ImportOptionId = "substack" | "artemis" | "url" | "markdown";
+export type ImportOptionId = "substack" | "artemis" | "x" | "url" | "markdown";
 
 export interface ImportOption {
   id: ImportOptionId;
@@ -39,6 +39,15 @@ export const PLATFORM_IMPORT_OPTIONS: ImportOption[] = [
     logoSrc: "/artemislogo.png",
     // Artemis posts are imported by pasting the article URL — the generic
     // URL importer detects and parses them (unlike Substack's ZIP flow).
+    href: "/dashboard/articles/import",
+  },
+  {
+    id: "x",
+    label: "Import from X",
+    platformLabel: "X",
+    logoSrc: "/xlogo.svg",
+    // X Articles are imported by their tweet URL — onboarding lists a writer's
+    // Articles, and the generic URL importer detects and parses each one.
     href: "/dashboard/articles/import",
   },
 ];

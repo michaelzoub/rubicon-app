@@ -20,6 +20,7 @@ description: Concise orientation map for important Rubicon app routes, architect
 - `app/api/import/url/route.ts`: one-article URL import API.
 - `app/api/import/substack/` and `app/api/import/substack/commit/`: Substack archive staging and publish.
 - `app/api/artemis/search/`, `articles/`, and `commit/`: Artemis profile search, fully paginated published-article listing, and bulk publish.
+- `app/api/x/search/`, `articles/`, and `commit/`: X exact-handle lookup (credential-free via FxTwitter), session-backed X Articles listing with dynamically discovered GraphQL query IDs, and bulk publish. Name search and profile-wide listing require `X_COOKIE`; pasted article URLs use the shared URL importer without it.
 - `lib/rubicon/import-server.ts`: service-role import persistence helpers; never expose its credentials to clients.
 
 ## Data and payments

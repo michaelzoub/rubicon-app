@@ -83,7 +83,7 @@ function useAnchorRect(anchorRef: React.RefObject<HTMLElement | null>, isOpen: b
   return rect;
 }
 
-type Step = "welcome" | "platform" | "connect" | "artemis" | "import" | "price" | "success";
+type Step = "welcome" | "platform" | "connect" | "artemis" | "x" | "import" | "price" | "success";
 
 // The "where do you mostly write" tiles come from lib/import/options — the
 // shared source of truth for import options across onboarding and the compose
@@ -128,9 +128,25 @@ interface ArtemisArticleSummary {
   url: string;
 }
 
+interface XProfile {
+  handle: string;
+  name: string;
+  avatarUrl: string | null;
+  /** Numeric X user id — the article listing endpoint keys on this, not the handle. */
+  userId: string;
+}
+
+interface XArticleSummary {
+  statusId: string;
+  title: string;
+  wordCount: number;
+  publishedAt: string | null;
+  url: string;
+}
+
 interface ArchiveStats {
   jobId: string;
-  source: "substack" | "artemis";
+  source: "substack" | "artemis" | "x";
   authorHandle?: string;
   authorName?: string;
   postCount: number;
@@ -217,6 +233,22 @@ export function SubstackOnboardingDialog({
   const artemisSearchAbortRef = useRef<AbortController | null>(null);
   const artemisFieldRef = useRef<HTMLDivElement>(null);
   const artemisSuggestionsRect = useAnchorRect(artemisFieldRef, artemisSuggestionsOpen && artemisSuggestions.length > 0);
+
+  // X path — mirrors Artemis: pick a writer to bulk-import their X Articles, or
+  // paste one article link for the one-off draft flow.
+  const [xInput, setXInput] = useState("");
+  const [xSuggestions, setXSuggestions] = useState<XProfile[]>([]);
+  const [xSuggestionsOpen, setXSuggestionsOpen] = useState(false);
+  const [xActiveSuggestion, setXActiveSuggestion] = useState(-1);
+  const [xProfile, setXProfile] = useState<XProfile | null>(null);
+  const [xArticles, setXArticles] = useState<XArticleSummary[] | null>(null);
+  const [xLoadingArticles, setXLoadingArticles] = useState(false);
+  const [xPending, setXPending] = useState(false);
+  const [xError, setXError] = useState<string | null>(null);
+  const [xChecking, setXChecking] = useState(false);
+  const xSearchAbortRef = useRef<AbortController | null>(null);
+  const xFieldRef = useRef<HTMLDivElement>(null);
+  const xSuggestionsRect = useAnchorRect(xFieldRef, xSuggestionsOpen && xSuggestions.length > 0);
 
   // Step 3 — import archive
   const [subdomain, setSubdomain] = useState<string | null>(null);
@@ -473,6 +505,40 @@ export function SubstackOnboardingDialog({
     return () => window.clearTimeout(timer);
   }, [artemisInput, artemisProfile, demo, open, step]);
 
+  // X writer typeahead. A pasted link or anything URL-shaped skips the search —
+  // the link itself already identifies the article.
+  useEffect(() => {
+    if (!open || step !== "x" || demo || xProfile) return;
+    const query = xInput.trim().replace(/^@/, "");
+    if (query.length < 2 || /[/]/.test(query) || /\./.test(query)) {
+      setXSuggestions([]);
+      setXSuggestionsOpen(false);
+      setXChecking(false);
+      return;
+    }
+    setXChecking(true);
+    const timer = window.setTimeout(async () => {
+      xSearchAbortRef.current?.abort();
+      const controller = new AbortController();
+      xSearchAbortRef.current = controller;
+      try {
+        const response = await fetch(`/api/x/search?query=${encodeURIComponent(query)}`, { signal: controller.signal });
+        const body = await response.json().catch(() => null) as { suggestions?: XProfile[] } | null;
+        if (controller.signal.aborted) return;
+        const rows = body?.suggestions ?? [];
+        setXSuggestions(rows);
+        setXSuggestionsOpen(rows.length > 0);
+        setXActiveSuggestion(-1);
+        setXChecking(false);
+      } catch (cause) {
+        // Suggestions are best-effort; pasting a link always works. A
+        // superseded request's abort must not clear the newer one's spinner.
+        if (!(cause instanceof DOMException && cause.name === "AbortError")) setXChecking(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [xInput, xProfile, demo, open, step]);
+
   function chooseSuggestion(suggestion: Suggestion) {
     skipSearchRef.current = true;
     setInput(suggestion.subdomain);
@@ -489,6 +555,7 @@ export function SubstackOnboardingDialog({
     if (!platform) return;
     if (platform === "substack") setStep("connect");
     else if (platform === "artemis") setStep("artemis");
+    else if (platform === "x") setStep("x");
     else close();
   }
 
@@ -592,6 +659,98 @@ export function SubstackOnboardingDialog({
     if (artemisUrlDetected) void importArtemisArticle(artemisInput.trim());
   }
 
+  /** A pasted X article link short-circuits the search → pick flow entirely. */
+  const xUrlDetected = detectImportSource(xInput.trim()) === "x";
+
+  /** Import a single X article URL, then hand off to the draft editor. */
+  async function importXArticle(url: string) {
+    if (demo) return;
+    if (xPending || navigatingRef.current) return;
+    setXPending(true);
+    setXError(null);
+    try {
+      const response = await fetch("/api/import/url", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const body = await response.json().catch(() => null) as
+        | (ImportResult & { error?: { message?: string } })
+        | null;
+      if (!response.ok || !body) {
+        throw new Error(body?.error?.message || "Couldn't import that X article. Try again.");
+      }
+      // Same handoff as "Import from URL": nothing is saved or published until
+      // the writer reviews the draft in the editor.
+      stashImport(body);
+      window.localStorage.setItem(SEEN_KEY, "1");
+      navigatingRef.current = true;
+      router.push("/dashboard/articles/new?imported=1");
+    } catch (cause) {
+      setXError(cause instanceof Error ? cause.message : "Couldn't import that X article.");
+      setXPending(false);
+    }
+  }
+
+  /** Select a writer, load their published X Articles, then open bulk pricing. */
+  async function chooseXProfile(profile: XProfile) {
+    setXProfile(profile);
+    setXSuggestions([]);
+    setXSuggestionsOpen(false);
+    setXActiveSuggestion(-1);
+    setXArticles(null);
+    setXError(null);
+    setXLoadingArticles(true);
+    try {
+      const response = await fetch(`/api/x/articles?userId=${encodeURIComponent(profile.userId)}&handle=${encodeURIComponent(profile.handle)}`);
+      const body = await response.json().catch(() => null) as
+        | { articles?: XArticleSummary[]; error?: { message?: string } }
+        | null;
+      if (!response.ok || !body?.articles) {
+        throw new Error(body?.error?.message || "Couldn't load articles from X. Try again.");
+      }
+      setXArticles(body.articles);
+      if (body.articles.length === 0) return;
+      const totalWordCount = body.articles.reduce((sum, article) => sum + article.wordCount, 0);
+      setArchive({
+        jobId: `x:${profile.handle}`,
+        source: "x",
+        authorHandle: profile.handle,
+        authorName: profile.name,
+        postCount: body.articles.length,
+        totalWordCount,
+        averageWordCount: Math.round(totalWordCount / body.articles.length),
+        recommendedPriceUsd: 0,
+        posts: body.articles.map((article) => ({
+          id: article.statusId,
+          title: article.title,
+          wordCount: article.wordCount,
+          url: article.url,
+        })),
+      });
+      setSelectedPostIds(body.articles.map((article) => article.statusId));
+      setPostPrices({});
+      setDrawerOpen(false);
+      setStep("price");
+    } catch (cause) {
+      setXError(cause instanceof Error ? cause.message : "Couldn't load articles from X.");
+      setXProfile(null);
+    } finally {
+      setXLoadingArticles(false);
+    }
+  }
+
+  /** Back from the article list to the writer search, keeping the query. */
+  function changeXProfile() {
+    setXProfile(null);
+    setXArticles(null);
+    setXError(null);
+  }
+
+  function submitX() {
+    if (xUrlDetected) void importXArticle(xInput.trim());
+  }
+
   /** Step 3 → 2: re-choose the publication, prefilled so lookup re-verifies. */
   function backToConnect() {
     skipSearchRef.current = true;
@@ -606,6 +765,11 @@ export function SubstackOnboardingDialog({
     if (archive?.source === "artemis") {
       changeArtemisProfile();
       setStep("artemis");
+      return;
+    }
+    if (archive?.source === "x") {
+      changeXProfile();
+      setStep("x");
       return;
     }
     setUploadState({ phase: "idle" });
@@ -721,17 +885,24 @@ export function SubstackOnboardingDialog({
     setGoingLive(true);
     setPriceError(null);
     try {
-      // Substack creates the creator row during its connect step. Artemis has
-      // no equivalent connect request, so guarantee the FK owner exists before
-      // the server inserts articles for a newly authenticated writer.
+      // Substack creates the creator row during its connect step. Artemis and X
+      // have no equivalent connect request, so guarantee the FK owner exists
+      // before the server inserts articles for a newly authenticated writer.
       if (!client) throw new Error("Could not prepare your creator account. Refresh and try again.");
       await client.getCreator();
       const token = await getAccessToken();
-      const isArtemis = archive.source === "artemis";
-      const response = await fetch(isArtemis ? "/api/artemis/commit" : "/api/import/substack/commit", {
+      // Artemis and X share the identical bulk-URL commit payload; only the
+      // endpoint differs. Substack posts its export-job shape instead.
+      const isBulkUrl = archive.source === "artemis" || archive.source === "x";
+      const endpoint = archive.source === "artemis"
+        ? "/api/artemis/commit"
+        : archive.source === "x"
+          ? "/api/x/commit"
+          : "/api/import/substack/commit";
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify(isArtemis
+        body: JSON.stringify(isBulkUrl
           ? {
               handle: archive.authorHandle,
               authorName: archive.authorName,
@@ -856,7 +1027,7 @@ export function SubstackOnboardingDialog({
             role="dialog"
             aria-modal="true"
             aria-labelledby="writing-platform-title"
-            className={`${cardClass} max-w-md`}
+            className={`${cardClass} max-w-lg`}
             initial={{ opacity: 0, y: 14, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0 }}
@@ -864,13 +1035,13 @@ export function SubstackOnboardingDialog({
           >
             <div className="text-center">
               <p className="text-xs font-medium text-[var(--quiet)]">
-                Step 1{platform ? ` of ${platform === "artemis" ? 3 : 4}` : ""}
+                Step 1{platform ? ` of ${platform === "artemis" || platform === "x" ? 3 : 4}` : ""}
               </p>
               <h1 id="writing-platform-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Where do you mostly write?</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">We’ll tailor the import to your platform.</p>
             </div>
 
-            <div className="mt-7 grid grid-cols-3 gap-3" role="radiogroup" aria-labelledby="writing-platform-title">
+            <div className="mt-7 grid grid-cols-4 gap-3 max-sm:grid-cols-2" role="radiogroup" aria-labelledby="writing-platform-title">
               {ONBOARDING_PLATFORM_CHOICES.map((option) => (
                 <button
                   key={option.id}
@@ -1264,6 +1435,172 @@ export function SubstackOnboardingDialog({
           </motion.section>
         )}
 
+        {step === "x" && (
+          <motion.section
+            key="x"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="x-onboarding-title"
+            className={`${cardClass} max-w-md`}
+            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.01 : 0.35, ease: EASE_OUT }}
+          >
+            <button type="button" onClick={() => setStep("platform")} className="dashboard-icon-button absolute left-4 top-4" aria-label="Back to choose where you write">
+              <ArrowLeft size={15} />
+            </button>
+            <div className="text-center">
+              <p className="text-xs font-medium text-[var(--quiet)]">Step 2 of 3</p>
+              <h1 id="x-onboarding-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Import from X</h1>
+              <p className="mt-2 text-sm text-[var(--muted)]">Find your X profile to import its published Articles, or paste one article link.</p>
+            </div>
+
+            {!xProfile ? (
+              <div className="relative mt-7" ref={xFieldRef}>
+                <label htmlFor="x-search-input" className="sr-only">
+                  X handle, name, or article link
+                </label>
+                <input
+                  id="x-search-input"
+                  data-testid="x-search-input"
+                  value={xInput}
+                  onChange={(event) => {
+                    setXInput(event.target.value);
+                    if (xError) setXError(null);
+                  }}
+                  onKeyDown={(event) => {
+                    if (xSuggestionsOpen && xSuggestions.length > 0) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setXActiveSuggestion((index) => (index + 1) % xSuggestions.length);
+                        return;
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setXActiveSuggestion((index) => (index <= 0 ? xSuggestions.length - 1 : index - 1));
+                        return;
+                      }
+                      if (event.key === "Escape") {
+                        setXSuggestionsOpen(false);
+                        return;
+                      }
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        // Enter picks the highlighted writer, or the only match.
+                        const pick = xActiveSuggestion >= 0
+                          ? xSuggestions[xActiveSuggestion]
+                          : xSuggestions.length === 1
+                            ? xSuggestions[0]
+                            : null;
+                        if (pick) void chooseXProfile(pick);
+                        return;
+                      }
+                    }
+                    if (event.key === "Enter" && xUrlDetected) submitX();
+                  }}
+                  onBlur={() => setXSuggestionsOpen(false)}
+                  placeholder="@handle or X article link"
+                  className="h-12 w-full rounded-lg border border-transparent bg-[var(--surface-muted)] px-3.5 text-sm outline-none transition focus:bg-white focus:ring-2 focus:ring-[rgba(22,24,29,0.2)]"
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  role="combobox"
+                  aria-expanded={xSuggestionsOpen && xSuggestions.length > 0}
+                  aria-autocomplete="list"
+                  aria-controls="x-suggestions"
+                  aria-describedby="x-feedback"
+                />
+                {xSuggestionsOpen && xSuggestions.length > 0 && xSuggestionsRect && createPortal(
+                  <ul
+                    id="x-suggestions"
+                    role="listbox"
+                    style={{ position: "fixed", top: xSuggestionsRect.top, left: xSuggestionsRect.left, width: xSuggestionsRect.width, maxHeight: xSuggestionsRect.maxHeight }}
+                    className="dashboard-theme z-[60] overflow-y-auto rounded-lg border border-[var(--line)] bg-white py-1 shadow-lg"
+                  >
+                    {xSuggestions.map((suggestion, index) => (
+                      <li key={suggestion.handle} role="option" aria-selected={index === xActiveSuggestion}>
+                        <button
+                          type="button"
+                          // preventDefault keeps focus in the input so onBlur
+                          // doesn't close the list before the click lands.
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => void chooseXProfile(suggestion)}
+                          onMouseEnter={() => setXActiveSuggestion(index)}
+                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left ${index === xActiveSuggestion ? "bg-[var(--surface-muted)]" : ""}`}
+                        >
+                          <SubstackSuggestionLogo src={suggestion.avatarUrl} name={suggestion.name} />
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium">{suggestion.name}</span>
+                            <span className="mono block truncate text-xs text-[var(--muted)]">@{suggestion.handle}</span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>,
+                  document.body
+                )}
+              </div>
+            ) : (
+              <div className="mt-7 flex items-center gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3" aria-busy={xLoadingArticles}>
+                <SubstackSuggestionLogo src={xProfile.avatarUrl} name={xProfile.name} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{xProfile.name}</span>
+                  <span className="mono block truncate text-xs text-[var(--muted)]">@{xProfile.handle}</span>
+                </span>
+                {xLoadingArticles ? (
+                  <span className="inline-flex shrink-0 items-center gap-1.5 text-xs text-[var(--muted)]" role="status">
+                    <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                    <span className="sr-only">Loading articles…</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={changeXProfile}
+                    className="shrink-0 text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+            )}
+
+            {xProfile && xArticles && xArticles.length === 0 && (
+              <p className="mt-3 rounded-lg bg-[var(--surface-muted)] p-5 text-center text-sm text-[var(--muted)]">
+                No published Articles yet on this profile.
+              </p>
+            )}
+
+            <div id="x-feedback" className="mt-3 min-h-6 text-sm leading-5" role="status" aria-live="polite">
+              {!xProfile && xChecking && !xUrlDetected && !xError && (
+                <span className="inline-flex items-center gap-1.5 text-[var(--quiet)]">
+                  <Loader2 size={13} className="animate-spin" aria-hidden="true" /> Checking…
+                </span>
+              )}
+              {!xProfile && xUrlDetected && !xError && (
+                <span className="inline-flex items-start gap-1.5 text-[#165c3e]">
+                  <Check size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>X article link detected</span>
+                </span>
+              )}
+              {xError && <span role="alert" className="text-[#8d2f2d]">{xError}</span>}
+            </div>
+
+            {!xProfile && (
+              <button
+                type="button"
+                data-testid="x-import-button"
+                onClick={submitX}
+                disabled={xPending || !xUrlDetected}
+                className="button button-primary mt-4 w-full justify-center py-3 disabled:opacity-40"
+              >
+                {xPending ? <><Loader2 size={16} className="animate-spin" /> Importing…</> : <>Import article <ArrowRight size={16} /></>}
+              </button>
+            )}
+          </motion.section>
+        )}
+
         {step === "import" && (
           <motion.section
             key="import"
@@ -1383,7 +1720,7 @@ export function SubstackOnboardingDialog({
             </button>
             <div className="text-center">
               <p className="text-xs font-medium text-[var(--quiet)]">
-                {archive.source === "artemis" ? "Step 3 of 3" : "Step 4 of 4"}
+                {archive.source === "artemis" || archive.source === "x" ? "Step 3 of 3" : "Step 4 of 4"}
               </p>
               <h1 id="substack-price-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Set your price</h1>
               <p className="mt-2 text-sm text-[var(--muted)]">Choose what goes live, then set one price or fine-tune each post.</p>

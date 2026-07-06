@@ -239,13 +239,13 @@ export default function ArticleDetailPage() {
                   <EmptyState title="No reads yet" description="When agents read, you’ll see which sections they found useful." />
                 </div>
               ) : (
-                <ul className="grid gap-1 p-2">
+                <ul className="grid max-h-80 gap-1 overflow-y-auto overflow-x-hidden p-2">
                   {data.sectionUsage.map((s) => {
                     const max = Math.max(...data.sectionUsage.map((x) => x.wordsRead), 1);
                     return (
                       <li key={s.sectionId} className="px-5 py-3">
-                        <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="truncate font-medium">{s.heading}</span>
+                        <div className="flex items-start justify-between gap-3 text-sm">
+                          <span className="min-w-0 break-words font-medium">{s.heading}</span>
                           <span className="shrink-0 text-[var(--muted)]">{s.wordsRead.toLocaleString()} words</span>
                         </div>
                         <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
@@ -265,14 +265,14 @@ export default function ArticleDetailPage() {
                   <EmptyState title="No sessions yet" description="Each time a buyer agent reads through your seller agent, it appears here." />
                 </div>
               ) : (
-                <ul className="grid gap-1 p-2">
+                <ul className="grid max-h-80 gap-1 overflow-y-auto p-2">
                   {data.sessions.map((session) => (
                     <li key={session.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
-                      <div>
-                        <div className="font-medium">{formatRelative(session.startedAt)}</div>
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{formatRelative(session.startedAt)}</div>
                         <div className="text-xs text-[var(--muted)]">{session.wordsRead.toLocaleString()} words read</div>
                       </div>
-                      <span className="font-semibold">{formatUsd(session.earnings)}</span>
+                      <span className="shrink-0 font-semibold">{formatUsd(session.earnings)}</span>
                     </li>
                   ))}
                 </ul>
