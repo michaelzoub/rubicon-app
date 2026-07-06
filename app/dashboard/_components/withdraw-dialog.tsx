@@ -79,7 +79,6 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
   const gasMissing = gasBalance.status === "success" && Number(gasBalance.value ?? "0") <= 0;
   const canInitiate =
     balance.status === "success" &&
-    !hasPending &&
     !!amount &&
     !amountError &&
     !destError &&
@@ -213,32 +212,35 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
 
               {done ? (
                 <SuccessPanel done={done} differentDestination={differentDestination} />
-              ) : hasPending ? (
-                <div className="grid gap-3">
-                  <p className="text-sm text-[var(--muted)]">
-                    A withdrawal of <span className="font-medium text-[var(--ink)]">{formatUsdc(balance.withdrawingAtomic)} USDC</span> is in
-                    Circle Gateway&rsquo;s ~{WITHDRAWAL_DELAY_DAYS}-day security delay.
-                  </p>
-                  {matured ? (
-                    <button
-                      type="button"
-                      onClick={onComplete}
-                      disabled={!!busy || gasMissing}
-                      className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--river-deep)] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
-                    >
-                      {busy === "completing" && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
-                      Complete withdrawal
-                    </button>
-                  ) : (
-                    <div className="rounded-md border border-[var(--faint)] px-3 py-2 text-xs text-[var(--muted)]">
-                      Unlocks at block {balance.withdrawalBlock.toString()} — about {blocksRemaining.toString()} blocks
-                      remaining (current block {balance.currentBlock.toString()}). Reopen this dialog after it matures to
-                      finish.
+              ) : (
+                <>
+                  {hasPending && (
+                    <div className="grid gap-3">
+                      <p className="text-sm text-[var(--muted)]">
+                        A withdrawal of <span className="font-medium text-[var(--ink)]">{formatUsdc(balance.withdrawingAtomic)} USDC</span> is in
+                        Circle Gateway&rsquo;s ~{WITHDRAWAL_DELAY_DAYS}-day security delay.
+                      </p>
+                      {matured ? (
+                        <button
+                          type="button"
+                          onClick={onComplete}
+                          disabled={!!busy || gasMissing}
+                          className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--river-deep)] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                        >
+                          {busy === "completing" && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
+                          Complete withdrawal
+                        </button>
+                      ) : (
+                        <div className="rounded-md border border-[var(--faint)] px-3 py-2 text-xs text-[var(--muted)]">
+                          Unlocks at block {balance.withdrawalBlock.toString()} — about {blocksRemaining.toString()} blocks
+                          remaining (current block {balance.currentBlock.toString()}). Reopen this dialog after it matures to
+                          finish, or start another withdrawal below.
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-              ) : (
-                <div className="grid gap-4">
+                  {hasPending && <div className="h-px bg-[var(--faint)]" />}
+                  <div className="grid gap-4">
                   <div className="grid gap-1.5">
                     <label htmlFor="wd-amount" className="text-sm font-medium">
                       Amount
@@ -285,10 +287,17 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
                     ) : null}
                   </div>
 
-                  <p className="text-xs text-[var(--muted)]">
-                    Earnings are held in Circle Gateway. Withdrawals use a ~{WITHDRAWAL_DELAY_DAYS}-day security delay: you
-                    initiate now and return to complete it once the funds mature.
-                  </p>
+                  {hasPending ? (
+                    <p className="text-xs text-[#8d2f2d]">
+                      You already have a pending withdrawal. Initiating another adds to it and resets the ~{WITHDRAWAL_DELAY_DAYS}-day
+                      timer on the entire pending amount.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-[var(--muted)]">
+                      Earnings are held in Circle Gateway. Withdrawals use a ~{WITHDRAWAL_DELAY_DAYS}-day security delay: you
+                      initiate now and return to complete it once the funds mature.
+                    </p>
+                  )}
 
                   <button
                     type="button"
@@ -297,12 +306,15 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
                     className="inline-flex items-center justify-center gap-2 rounded-md bg-[var(--river-deep)] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
                   >
                     {busy === "initiating" && <Loader2 size={15} className="animate-spin" aria-hidden="true" />}
-                    Initiate withdrawal
+                    {hasPending ? "Add to withdrawal" : "Initiate withdrawal"}
                   </button>
                   {available <= BigInt(0) && (
-                    <p className="text-center text-xs text-[var(--muted)]">No balance available to withdraw yet.</p>
+                    <p className="text-center text-xs text-[var(--muted)]">
+                      {hasPending ? "No additional balance available to withdraw right now." : "No balance available to withdraw yet."}
+                    </p>
                   )}
-                </div>
+                  </div>
+                </>
               )}
 
               {actionError && <p className="text-sm text-[#8d2f2d]">{actionError}</p>}
