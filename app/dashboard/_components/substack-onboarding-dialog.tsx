@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, Loader2, Mail, MousePointer2, PenLine, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Download, ExternalLink, Loader2, Mail, MousePointer2, PenLine, Upload, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -707,7 +707,7 @@ export function SubstackOnboardingDialog({
         | { articles?: XArticleSummary[]; error?: { message?: string } }
         | null;
       if (!response.ok || !body?.articles) {
-        throw new Error(body?.error?.message || "Couldn't load articles from X. Try again.");
+        throw new Error(body?.error?.message || "Couldn't load articles from X right now. Try again, or paste an individual article link below.");
       }
       setXArticles(body.articles);
       if (body.articles.length === 0) return;
@@ -733,7 +733,7 @@ export function SubstackOnboardingDialog({
       setDrawerOpen(false);
       setStep("price");
     } catch (cause) {
-      setXError(cause instanceof Error ? cause.message : "Couldn't load articles from X.");
+      setXError(cause instanceof Error ? cause.message : "Couldn't load articles from X right now. Try again, or paste an individual article link below.");
       setXProfile(null);
     } finally {
       setXLoadingArticles(false);
@@ -1584,6 +1584,11 @@ export function SubstackOnboardingDialog({
                   <span>X article link detected</span>
                 </span>
               )}
+              {!xProfile && !xChecking && !xUrlDetected && !xError && xInput.trim().length >= 2 && xSuggestions.length === 0 && (
+                <span className="text-[var(--quiet)]">
+                  No results? Paste an <span className="mono">x.com</span> article link to import a single article.
+                </span>
+              )}
               {xError && <span role="alert" className="text-[#8d2f2d]">{xError}</span>}
             </div>
 
@@ -1618,61 +1623,71 @@ export function SubstackOnboardingDialog({
             </button>
             <div className="text-center">
               <p className="text-xs font-medium text-[var(--quiet)]">Step 3 of 4</p>
-              <h1 id="substack-import-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">Import your archive</h1>
-              <p className="mt-2 text-sm text-[var(--muted)]">Grab your export from Substack, then get it to us either way.</p>
+              <h1 id="substack-import-title" className="mt-2 text-balance text-2xl font-semibold tracking-[-0.02em]">Import your archive</h1>
+              <p className="mt-2 text-pretty text-sm text-[var(--muted)]">Download your export from Substack, then upload it here.</p>
             </div>
 
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-lg bg-[var(--surface-muted)] p-4">
-                <div className="flex items-center gap-2">
-                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-[var(--ink)] text-xs font-semibold text-white" aria-hidden="true">1</span>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2 px-1">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-[var(--muted)]" aria-hidden="true">1</span>
                   <h2 className="text-sm font-semibold">Request your export</h2>
                 </div>
-                <p className="mt-1 text-sm leading-5 text-[var(--muted)]">This opens your export section directly — click ‘New export’, Substack will prepare it in a few minutes.</p>
-                <a href={settingsUrl ?? "#"} target="_blank" rel="noreferrer" data-testid="export-settings-link" className="button button-primary mt-3 w-full justify-center text-sm">
-                  Open my export settings <ExternalLink size={14} aria-hidden="true" />
-                </a>
-                <ExportSettingsPreview />
-                <p className="mt-2 text-xs leading-4 text-[var(--muted)]">When it’s done, the ZIP appears in the Download column right on that page — no need to wait for Substack’s email.</p>
+                <div className="rounded-lg bg-[var(--surface-muted)] p-4">
+                  <p className="text-sm leading-5 text-[var(--muted)]">This opens your export section directly — click ‘New export’, Substack will prepare it in a few minutes.</p>
+                  <a href={settingsUrl ?? "#"} target="_blank" rel="noreferrer" data-testid="export-settings-link" className="button button-primary mt-3 w-full justify-center text-sm">
+                    Open my export settings <ExternalLink size={14} aria-hidden="true" />
+                  </a>
+                  <ExportSettingsPreview />
+                  <p className="mt-2 text-xs leading-4 text-[var(--muted)]">When it’s done, the ZIP appears in the Download column right on that page — no need to wait for Substack’s email.</p>
+                </div>
               </div>
 
               <div className="flex flex-col gap-3">
-                <div className="rounded-lg bg-[var(--surface-muted)] p-4">
-                  <div className="flex items-center gap-2">
-                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-[var(--muted)]" aria-hidden="true">2</span>
-                    <h2 className="text-sm font-semibold">Send it to us</h2>
-                  </div>
-                  <p className="mt-1 text-sm leading-5 text-[var(--muted)]">Drop the ZIP below, or email it — attach the file or just forward Substack’s export email.</p>
-                  <a href={mailtoHref} data-testid="email-export-link" className="button button-primary mt-3 text-sm">
-                    <Mail size={14} aria-hidden="true" /> Email my export
-                  </a>
+                <div className="flex items-center gap-2 px-1">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white text-xs font-semibold text-[var(--muted)]" aria-hidden="true">2</span>
+                  <h2 className="text-sm font-semibold">Send it to us</h2>
                 </div>
 
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   disabled={uploadState.phase === "uploading" || uploadState.phase === "parsing"}
-                  className={`grid min-h-24 w-full flex-1 place-items-center rounded-lg p-5 text-center transition-colors ${
-                    dragging ? "bg-[#eaeaec] ring-2 ring-inset ring-[var(--ink)]" : "bg-[var(--surface-muted)] hover:bg-[var(--hovered)]"
+                  data-testid="drop-zone"
+                  className={`grid min-h-32 w-full flex-1 place-items-center rounded-lg border-2 border-dashed p-6 text-center transition-[background-color,border-color,transform] duration-150 ease-out active:scale-[0.98] ${
+                    dragging
+                      ? "border-[var(--ink)] bg-[#eaeaec]"
+                      : "border-[var(--line)] bg-[var(--surface-muted)] hover:border-[var(--quiet)] hover:bg-[var(--hovered)]"
                   }`}
                 >
-              {uploadState.phase === "uploading" || uploadState.phase === "parsing" ? (
-                <span className="grid justify-items-center gap-2">
-                  <Loader2 size={18} className="animate-spin text-[var(--muted)]" aria-hidden="true" />
-                  <span className="text-sm text-[var(--muted)]" role="status">
-                    {uploadState.phase === "parsing" ? "Reading your archive…" : `Uploading… ${uploadState.percent}%`}
-                  </span>
-                  <span className="h-1 w-44 overflow-hidden rounded-full bg-[#e4e4e7]">
-                    <span
-                      className="block h-full rounded-full bg-[#18181b] transition-[width] duration-200"
-                      style={{ width: `${uploadState.phase === "parsing" ? 100 : uploadState.percent}%` }}
-                    />
-                  </span>
-                </span>
-              ) : (
-                <span className="text-sm text-[var(--muted)]">Or drop your ZIP anywhere on this page.</span>
-              )}
+                  {uploadState.phase === "uploading" || uploadState.phase === "parsing" ? (
+                    <span className="grid justify-items-center gap-2.5">
+                      <Loader2 size={22} className="animate-spin text-[var(--muted)]" aria-hidden="true" />
+                      <span className="text-sm text-[var(--muted)]" role="status">
+                        {uploadState.phase === "parsing" ? "Reading your archive…" : <>Uploading… <span className="tabular-nums">{uploadState.percent}%</span></>}
+                      </span>
+                      <span className="h-1 w-44 overflow-hidden rounded-full bg-[#e4e4e7]">
+                        <span
+                          className="block h-full rounded-full bg-[#18181b] transition-[width] duration-200"
+                          style={{ width: `${uploadState.phase === "parsing" ? 100 : uploadState.percent}%` }}
+                        />
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="grid justify-items-center gap-2">
+                      <Upload size={28} className="text-[var(--muted)]" aria-hidden="true" />
+                      <span className="text-sm font-medium text-[var(--ink)]">Drop your ZIP here</span>
+                      <span className="text-xs text-[var(--muted)]">or click to browse</span>
+                    </span>
+                  )}
                 </button>
+
+                <div className="rounded-lg bg-[var(--surface-muted)] p-3">
+                  <p className="text-center text-xs text-[var(--muted)]">Prefer email? Attach the file or forward Substack’s export email.</p>
+                  <a href={mailtoHref} data-testid="email-export-link" className="button button-secondary mt-2 w-full justify-center text-sm">
+                    <Mail size={14} aria-hidden="true" /> Email my export
+                  </a>
+                </div>
               </div>
             </div>
             <input

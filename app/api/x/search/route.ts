@@ -5,9 +5,11 @@ export const runtime = "nodejs";
 
 /**
  * X writer lookup for the onboarding step. Exact handles resolve through the
- * public FxTwitter profile API; broader name queries proxy X's session-gated
- * `search/typeahead.json`. Both normalize to the tiny dropdown shape, carrying
- * `userId` because article listing keys on it rather than the handle.
+ * public FxTwitter profile API; broader name queries use FxTwitter's public v2
+ * typeahead endpoint (no auth needed) when no X_COOKIE is configured, or X's
+ * session-gated `search/typeahead.json` when one is. Both normalize to the tiny
+ * dropdown shape, carrying `userId` because article listing keys on it rather
+ * than the handle.
  */
 
 interface Suggestion {
@@ -25,7 +27,7 @@ interface XUserRow {
 }
 
 const TYPEAHEAD_URL = "https://x.com/i/api/1.1/search/typeahead.json";
-const FXTWITTER_PROFILE_URL = "https://api.fxtwitter.com";
+const FXTWITTER_API_BASE = "https://api.fxtwitter.com";
 const FETCH_TIMEOUT_MS = 5_000;
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 1_000;
@@ -58,10 +60,11 @@ async function search(query: string): Promise<Suggestion[]> {
     if (profile) return [profile];
   }
 
-  // X's typeahead is session-gated. Without a configured session, calling it
-  // with guest auth consistently returns 404, so avoid a doomed request. Exact
-  // @handle lookup above remains available without credentials.
-  if (!process.env.X_COOKIE?.trim()) return [];
+  // Without a configured X session, use FxTwitter's public v2 typeahead API
+  // instead of X's session-gated typeahead (which returns 404 with guest auth).
+  if (!process.env.X_COOKIE?.trim()) {
+    return searchViaFxTwitter(query);
+  }
 
   let rows: XUserRow[];
   try {
@@ -80,9 +83,7 @@ async function search(query: string): Promise<Suggestion[]> {
       headers: await getXHeaders(),
     });
     if (!response.ok) {
-      // typeahead is login-gated: guest auth gets a 404 here. Log the status so
-      // the empty dropdown is diagnosable — set X_COOKIE to a logged-in session.
-      console.warn(`X typeahead upstream ${response.status}${process.env.X_COOKIE ? "" : " (no X_COOKIE set — guest auth can't reach this endpoint)"}`);
+      console.warn(`X typeahead upstream ${response.status}`);
       return [];
     }
     const body = (await response.json()) as { users?: XUserRow[] };
@@ -111,6 +112,50 @@ async function search(query: string): Promise<Suggestion[]> {
   return suggestions;
 }
 
+/** FxTwitter v2 typeahead — public, no X session required. */
+async function searchViaFxTwitter(query: string): Promise<Suggestion[]> {
+  try {
+    const url = new URL(`${FXTWITTER_API_BASE}/2/typeahead`);
+    url.searchParams.set("q", query);
+    url.searchParams.set("result_type", "users");
+
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { accept: "application/json", "user-agent": "Rubicon/1.0 (https://rubiconpay.xyz)" },
+    });
+    if (!response.ok) return [];
+
+    const body = (await response.json()) as {
+      code?: number;
+      users?: Array<{
+        id?: string | number;
+        screen_name?: string;
+        name?: string;
+        avatar_url?: string | null;
+      }>;
+    };
+
+    const rows = Array.isArray(body?.users) ? body.users : [];
+    const suggestions: Suggestion[] = [];
+    for (const row of rows) {
+      const handle = typeof row.screen_name === "string" ? row.screen_name.trim() : "";
+      const userId = String(row.id ?? "").trim();
+      if (!/^[A-Za-z0-9_]{1,15}$/.test(handle) || !/^\d+$/.test(userId)) continue;
+      suggestions.push({
+        handle,
+        name: row.name?.trim() || handle,
+        avatarUrl: normalizeAvatar(row.avatar_url),
+        userId,
+      });
+      if (suggestions.length >= MAX_SUGGESTIONS) break;
+    }
+    return suggestions;
+  } catch (cause) {
+    console.warn("FxTwitter typeahead failed:", cause instanceof Error ? cause.message : cause);
+    return [];
+  }
+}
+
 function exactHandle(query: string): string | null {
   const value = query.trim().replace(/^@/, "");
   return /^[A-Za-z0-9_]{1,15}$/.test(value) ? value : null;
@@ -119,7 +164,7 @@ function exactHandle(query: string): string | null {
 /** Resolve an exact public handle without requiring a logged-in X session. */
 async function resolveExactHandle(handle: string): Promise<Suggestion | null> {
   try {
-    const response = await fetch(`${FXTWITTER_PROFILE_URL}/${encodeURIComponent(handle)}`, {
+    const response = await fetch(`${FXTWITTER_API_BASE}/${encodeURIComponent(handle)}`, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: { accept: "application/json", "user-agent": "Rubicon/1.0 (https://rubiconpay.xyz)" },
     });

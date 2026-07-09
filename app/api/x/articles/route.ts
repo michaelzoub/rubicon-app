@@ -8,13 +8,22 @@ export const runtime = "nodejs";
 /**
  * X Articles published by a selected writer.
  *
- * Proxies X's internal `UserArticlesTweets` GraphQL endpoint (keyed on the
- * numeric `userId` from the typeahead search) and flattens the timeline into
- * the tiny shape the onboarding picker needs. Each article's tweet id becomes a
- * canonical `x.com/<handle>/status/<id>` URL, which the shared URL import
- * pipeline (`importX`) turns into a full draft at publish time. Word counts here
- * are best-effort from the preview text — X's timeline doesn't ship the full
- * body — and are recomputed exactly at commit.
+ * Two strategies, in priority order:
+ *
+ * 1. **X_COOKIE set** — proxies X's internal `UserArticlesTweets` GraphQL
+ *    endpoint (keyed on the numeric `userId` from the typeahead search). This
+ *    is the most complete listing but requires a logged-in X session.
+ *
+ * 2. **No X_COOKIE** — falls back to FxTwitter's public v2 search API
+ *    (`GET /2/search?q=from:{handle}`). This is auth-free (rate-limited to
+ *    1000 req/min per IP) and returns recent posts including X Articles,
+ *    which carry an `article` block in the response. Up to 100 recent posts
+ *    are scanned; for most writers that covers all published articles.
+ *
+ * Each article's tweet id becomes a canonical `x.com/<handle>/status/<id>`
+ * URL, which the shared URL import pipeline (`importX`) turns into a full
+ * draft at publish time. Word counts here are best-effort from the preview
+ * text and are recomputed exactly at commit.
  */
 
 interface ArticleSummary {
@@ -35,6 +44,11 @@ const FETCH_TIMEOUT_MS = 8_000;
 const CACHE_TTL_MS = 60 * 1000; // Writers add articles; keep this fresh-ish.
 const MAX_CACHE_ENTRIES = 500;
 const PAGE_COUNT = 20;
+
+// FxTwitter public API v2 — no auth required.
+const FXTWITTER_API_BASE = "https://api.fxtwitter.com";
+const FXTWITTER_SEARCH_TIMEOUT_MS = 10_000;
+const FXTWITTER_SEARCH_COUNT = 100;
 
 // The exact feature flags X's web client sends with this query. Sent verbatim
 // because the endpoint rejects requests whose feature set it doesn't recognize.
@@ -92,44 +106,98 @@ export async function GET(request: Request) {
   if (!/^[A-Za-z0-9_]{1,15}$/.test(handle)) {
     return NextResponse.json({ error: { message: "Invalid X handle." } }, { status: 400 });
   }
-  if (!process.env.X_COOKIE?.trim()) {
-    return NextResponse.json(
-      { error: { message: "Importing all X Articles requires an X session. Set X_COOKIE, or paste one article link." } },
-      { status: 503 },
-    );
-  }
+
   const key = userId;
   const cached = cache.get(key);
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) {
     return NextResponse.json(cached.payload);
   }
 
-  try {
-    const headers = await getXHeaders();
-    let queryId = FALLBACK_QUERY_ID;
-    let response = await fetchArticles(queryId, userId, headers);
-    if (response.status === 404) {
-      queryId = await getXQueryId(GRAPHQL_OPERATION, FALLBACK_QUERY_ID, true);
-      if (queryId !== FALLBACK_QUERY_ID) response = await fetchArticles(queryId, userId, headers);
-    }
-    if (!response.ok) {
-      console.warn(`X UserArticlesTweets upstream ${response.status} (query ${queryId})`);
-      throw new Error(`${GRAPHQL_OPERATION} ${response.status}`);
-    }
-    const body = (await response.json()) as unknown;
+  const hasXCookie = !!process.env.X_COOKIE?.trim();
 
-    const articles = extractArticles(body, handle);
+  try {
+    const articles = hasXCookie
+      ? await fetchArticlesViaGraphQL(userId, handle)
+      : await fetchArticlesViaFxTwitter(handle);
+
     const payload = { articles };
     if (cache.size >= MAX_CACHE_ENTRIES) cache.clear();
     cache.set(key, { at: Date.now(), payload });
     return NextResponse.json(payload);
   } catch (cause) {
-    console.warn("X UserArticlesTweets request failed:", cause instanceof Error ? cause.message : cause);
+    console.warn("X articles fetch failed:", cause instanceof Error ? cause.message : cause);
     return NextResponse.json(
-      { error: { message: "Couldn't load articles from X. Try again." } },
-      { status: 502 },
+      { error: { message: hasXCookie
+        ? "Couldn't load articles from X right now. Try again, or paste an individual article link below."
+        : "Bulk X article import isn't available right now. Paste an individual article link below to import it." } },
+      { status: hasXCookie ? 502 : 503 },
     );
   }
+}
+
+/** Primary path: X's internal GraphQL endpoint (requires X_COOKIE). */
+async function fetchArticlesViaGraphQL(userId: string, handle: string): Promise<ArticleSummary[]> {
+  const headers = await getXHeaders();
+  let queryId = FALLBACK_QUERY_ID;
+  let response = await fetchArticles(queryId, userId, headers);
+  if (response.status === 404) {
+    queryId = await getXQueryId(GRAPHQL_OPERATION, FALLBACK_QUERY_ID, true);
+    if (queryId !== FALLBACK_QUERY_ID) response = await fetchArticles(queryId, userId, headers);
+  }
+  if (!response.ok) {
+    console.warn(`X UserArticlesTweets upstream ${response.status} (query ${queryId})`);
+    throw new Error(`${GRAPHQL_OPERATION} ${response.status}`);
+  }
+  const body = (await response.json()) as unknown;
+  return extractArticles(body, handle);
+}
+
+/**
+ * Fallback path: FxTwitter's public v2 search API. Searches `from:{handle}`
+ * and filters for tweets that carry an `article` block. No X session needed.
+ */
+async function fetchArticlesViaFxTwitter(handle: string): Promise<ArticleSummary[]> {
+  const url = new URL(`${FXTWITTER_API_BASE}/2/search`);
+  url.searchParams.set("q", `from:${handle}`);
+  url.searchParams.set("count", String(FXTWITTER_SEARCH_COUNT));
+
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(FXTWITTER_SEARCH_TIMEOUT_MS),
+    headers: { accept: "application/json", "user-agent": "Rubicon/1.0 (https://rubiconpay.xyz)" },
+  });
+  if (!response.ok) throw new Error(`FxTwitter search ${response.status}`);
+
+  const body = (await response.json()) as {
+    code?: number;
+    results?: Array<{
+      id?: string;
+      url?: string;
+      text?: string;
+      created_at?: string;
+      article?: { title?: string; preview_text?: string } | null;
+    }>;
+  };
+
+  const results = Array.isArray(body?.results) ? body.results : [];
+  const articles: ArticleSummary[] = [];
+  const seen = new Set<string>();
+
+  for (const result of results) {
+    if (!result?.article || !/^\d+$/.test(result.id ?? "") || seen.has(result.id!)) continue;
+    seen.add(result.id!);
+
+    const title = String(result.article.title ?? "").trim() || "Untitled article";
+    const preview = String(result.article.preview_text ?? result.text ?? "").trim();
+
+    articles.push({
+      statusId: result.id!,
+      title,
+      wordCount: countWords(`${title} ${preview}`),
+      publishedAt: typeof result.created_at === "string" ? toIso(result.created_at) : null,
+      url: result.url ?? `https://x.com/${handle}/status/${result.id}`,
+    });
+  }
+  return articles;
 }
 
 async function fetchArticles(queryId: string, userId: string, headers: Record<string, string>): Promise<Response> {

@@ -1,10 +1,12 @@
 "use client";
 
-import { getEmbeddedConnectedWallet, useCreateWallet, usePrivy, useWallets } from "@privy-io/react-auth";
+import { getEmbeddedConnectedWallet, useCreateWallet, useExportWallet, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useEffect, useState } from "react";
-import { Check, ChevronDown, CircleAlert, Copy, ExternalLink, KeyRound, LogOut, ShieldCheck, Trash2, Wallet } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Check, ChevronDown, CircleAlert, Copy, Download, ExternalLink, KeyRound, LogOut, ShieldCheck, Trash2, Wallet } from "lucide-react";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { RECEIVING_NETWORK, RECEIVING_NETWORK_LABEL } from "@/lib/chain";
+import { Reveal } from "../_components/charts";
 import {
   Card,
   CardHeader,
@@ -38,94 +40,142 @@ export default function SettingsPage() {
       {creator.status === "success" && (
         <>
           {/* Account */}
-          <Card>
-            <CardHeader title="Account" />
-            <div className="grid gap-4 p-5">
-              <AccountName
-                initial={creator.data?.displayName ?? ""}
-                username={creator.data?.username ?? ""}
-                connectedIdentity={user?.email?.address ?? user?.twitter?.username ?? null}
-                pending={updateCreator.pending}
-                onSave={async (name) => {
-                  await updateCreator.run({ displayName: name });
-                  creator.refetch();
-                }}
+          <Reveal>
+            <Card>
+              <CardHeader
+                title="Account"
+                action={
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f6ef] px-2.5 py-0.5 text-xs font-medium text-[#165c3e]">
+                    <ShieldCheck size={13} aria-hidden="true" /> Active
+                  </span>
+                }
               />
-              <div className="flex items-center justify-between rounded-[10px] bg-[var(--surface-muted)] p-4">
-                <span className="text-sm text-[var(--muted)]">Sign out of this device.</span>
-                <button type="button" onClick={() => logout()} className="button button-secondary text-sm">
-                  <LogOut size={15} aria-hidden="true" /> Sign out
-                </button>
-              </div>
-            </div>
-          </Card>
-
-          {/* Writer identity */}
-          <Card>
-            <CardHeader title="Writer identity" />
-            <div className="grid gap-2 p-3">
-              <div className="flex items-center justify-between gap-4 p-5">
-                <div>
-                  <div className="font-medium">Username</div>
-                  <div className="mt-0.5 text-sm text-[var(--muted)]">@{creator.data?.username}</div>
-                </div>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e8f6ef] px-2.5 py-0.5 text-xs font-medium text-[#165c3e]">
-                  <ShieldCheck size={13} aria-hidden="true" /> Active
-                </span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Payout connection */}
-          <Card id="payout-connection" className="scroll-mt-6 border-[var(--river-line)] bg-[var(--river-pale)]">
-            <CardHeader
-              title={
-                <span className="flex flex-wrap items-center gap-2.5">
-                  Payout connection
-                  {wallet.status === "success" && !wallet.data?.address && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--river-line)] bg-white px-2.5 py-1 text-xs font-semibold text-[var(--river-deep)]">
-                      <CircleAlert size={13} aria-hidden="true" /> Action required
-                    </span>
-                  )}
-                </span>
-              }
-              action={
-                <a
-                  href="https://faucet.circle.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="button button-secondary inline-flex items-center gap-1.5 text-sm"
-                >
-                  Get Arc testnet USDC <ExternalLink size={14} aria-hidden="true" />
-                </a>
-              }
-            />
-            <div className="p-5">
-              {wallet.status === "loading" && <LoadingState />}
-              {wallet.status === "error" && wallet.error && <ErrorState error={wallet.error} onRetry={wallet.refetch} />}
-              {wallet.status === "success" && (
-                <WalletEditor
-                  address={wallet.data?.address ?? ""}
-                  network={wallet.data?.network ?? RECEIVING_NETWORK}
-                  verified={wallet.data?.verified ?? false}
-                  pending={updateWallet.pending}
-                  error={updateWallet.error?.message ?? null}
-                  onSave={async (addr, network, verified) => {
-                    await updateWallet.run({ address: addr, network, verified });
-                    wallet.refetch();
+              <div className="grid gap-4 p-5">
+                <AccountName
+                  initial={creator.data?.displayName ?? ""}
+                  username={creator.data?.username ?? ""}
+                  connectedIdentity={user?.email?.address ?? user?.twitter?.username ?? null}
+                  pending={updateCreator.pending}
+                  onSave={async (name) => {
+                    await updateCreator.run({ displayName: name });
+                    creator.refetch();
                   }}
                 />
-              )}
-            </div>
-          </Card>
+                <div className="flex items-center justify-between rounded-lg bg-[var(--surface-muted)] p-4">
+                  <span className="text-sm text-[var(--muted)]">Sign out of this device.</span>
+                  <button type="button" onClick={() => logout()} className="button button-secondary text-sm">
+                    <LogOut size={15} aria-hidden="true" /> Sign out
+                  </button>
+                </div>
+              </div>
+            </Card>
+          </Reveal>
 
-          <ExtensionAccess />
+          {/* Payout connection */}
+          <Reveal delay={0.04}>
+            <Card id="payout-connection" className="scroll-mt-6">
+              <CardHeader
+                title="Payout connection"
+                action={
+                  <a
+                    href="https://faucet.circle.com"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="button button-secondary inline-flex items-center gap-1.5 text-sm"
+                  >
+                    Get Arc testnet USDC <ExternalLink size={14} aria-hidden="true" />
+                  </a>
+                }
+              />
+              <div className="grid gap-4 p-5">
+                {wallet.status === "loading" && <LoadingState />}
+                {wallet.status === "error" && wallet.error && <ErrorState error={wallet.error} onRetry={wallet.refetch} />}
+                {wallet.status === "success" && (
+                  <>
+                    <WalletEditor
+                      address={wallet.data?.address ?? ""}
+                      network={wallet.data?.network ?? RECEIVING_NETWORK}
+                      verified={wallet.data?.verified ?? false}
+                      pending={updateWallet.pending}
+                      error={updateWallet.error?.message ?? null}
+                      onSave={async (addr, network, verified) => {
+                        await updateWallet.run({ address: addr, network, verified });
+                        wallet.refetch();
+                      }}
+                    />
+                    <ExportPrivateKeyRow />
+                  </>
+                )}
+              </div>
+            </Card>
+          </Reveal>
+
+          <Reveal delay={0.08}>
+            <ExtensionAccess />
+          </Reveal>
 
           {/* Developer information */}
-          <DeveloperInfo creatorId={creator.data?.id ?? ""} privyId={user?.id ?? ""} />
+          <Reveal delay={0.12}>
+            <DeveloperInfo creatorId={creator.data?.id ?? ""} privyId={user?.id ?? ""} />
+          </Reveal>
         </>
       )}
     </div>
+  );
+}
+
+/**
+ * Folded into the Payout connection card rather than given its own — the
+ * embedded wallet is what payouts route through, so exporting its key is a
+ * secondary action on the same wallet, not a separate concern. Renders
+ * nothing until an embedded wallet exists (every creator gets one on login,
+ * so this is normally immediate).
+ */
+function ExportPrivateKeyRow() {
+  const { ready, wallets } = useWallets();
+  const { exportWallet } = useExportWallet();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const embedded = getEmbeddedConnectedWallet(wallets);
+  if (!embedded) return null;
+
+  const handleExport = async () => {
+    setError(null);
+    setPending(true);
+    try {
+      await exportWallet({ address: embedded.address });
+    } catch {
+      setError("Could not open the export dialog. Try again.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="h-px bg-[var(--line)]" />
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--surface-muted)] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-[var(--river-line)] bg-white text-[var(--river-deep)]">
+            <Download size={16} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Export private key</div>
+            <div className="text-xs text-[var(--muted)]">Reveal it in a secure Privy window to use in another wallet.</div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={!ready || pending}
+          className="button button-secondary shrink-0 text-sm disabled:opacity-50"
+        >
+          {pending ? "Opening…" : "Export"}
+        </button>
+      </div>
+      {error && <p className="rounded-lg bg-[#fff1f0] px-4 py-3 text-sm text-[#8d2f2d]">{error}</p>}
+    </>
   );
 }
 
@@ -166,18 +216,40 @@ function ExtensionAccess() {
           Generate a token, then paste it into the Chrome extension. Imported content always arrives as a draft.
         </p>
 
-        {newToken && (
-          <div className="rounded-lg bg-[#eef8f2] p-4">
-            <div className="text-sm font-medium text-[#165c3e]">Copy this token now. It will not be shown again.</div>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <code className="mono min-w-0 flex-1 break-all rounded-lg bg-white px-3 py-2 text-xs">{newToken}</code>
-              <button type="button" onClick={copyToken} className="button button-secondary text-sm">
-                {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
-                {copied ? "Copied" : "Copy"}
-              </button>
-            </div>
-          </div>
-        )}
+        <AnimatePresence initial={false}>
+          {newToken && (
+            <motion.div
+              key="new-token"
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+              className="rounded-lg bg-[#e8f6ef] p-4"
+            >
+              <div className="text-sm font-medium text-[#165c3e]">Copy this token now. It will not be shown again.</div>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <code className="mono min-w-0 flex-1 break-all rounded-lg bg-white px-3 py-2 text-xs">{newToken}</code>
+                <button type="button" onClick={copyToken} className="button button-secondary text-sm">
+                  <span className="relative inline-grid size-[15px] shrink-0 place-items-center">
+                    <AnimatePresence>
+                      <motion.span
+                        key={copied ? "check" : "copy"}
+                        initial={{ opacity: 0, scale: 0.25, filter: "blur(4px)" }}
+                        animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                        exit={{ opacity: 0, scale: 0.25, filter: "blur(4px)" }}
+                        transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+                        className="absolute inset-0 grid place-items-center"
+                      >
+                        {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>
+                  {copied ? "Copied" : "Copy"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {tokens.status === "loading" && <LoadingState />}
         {tokens.status === "error" && tokens.error && <ErrorState error={tokens.error} onRetry={tokens.refetch} />}
