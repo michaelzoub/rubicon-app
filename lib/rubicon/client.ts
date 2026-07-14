@@ -61,6 +61,13 @@ export interface RubiconClientOptions {
   supabaseAnonKey: string;
   getToken: () => Promise<string | null>;
   getIdentity: () => CreatorIdentity | null;
+  /**
+   * Raw Privy access token, used to authenticate the server-only embeddings
+   * sync route (`/api/embeddings/sync`). Optional: when absent, the semantic
+   * index is simply not refreshed from the browser (the gateway tolerates lag),
+   * so tests and unconfigured environments still work.
+   */
+  getPrivyToken?: () => Promise<string | null>;
 }
 
 type CreatorRow = {
@@ -388,7 +395,7 @@ async function bestEffortRows<T>(promise: PromiseLike<{ data: T[] | null; error:
   }
 }
 
-export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, getIdentity }: RubiconClientOptions) {
+export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, getIdentity, getPrivyToken }: RubiconClientOptions) {
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     accessToken: getToken,
     auth: {
@@ -397,6 +404,27 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
       detectSessionInUrl: false,
     },
   }) as SupabaseClient;
+
+  // Reconcile the semantic-search index after a lifecycle change. Embedding
+  // writes need the service role + OPENAI_API_KEY, so the actual work happens
+  // server-side; here we just notify that route. Best-effort by design: the
+  // gateway falls back to lexical scoring when rows lag, so a failed or skipped
+  // sync must never surface as a mutation error.
+  async function syncEmbeddings(articleId: string): Promise<void> {
+    if (!getPrivyToken) return;
+    try {
+      const token = await getPrivyToken();
+      if (!token) return;
+      await fetch("/api/embeddings/sync", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ articleId }),
+        keepalive: true,
+      });
+    } catch {
+      // Swallow — the index will catch up on the next lifecycle event or backfill.
+    }
+  }
 
   async function ensureCreator(): Promise<Creator> {
     const identity = requireIdentity(getIdentity);
@@ -769,6 +797,11 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
       };
 
       await must(supabase.from("articles").update(updates).eq("id", articleId).eq("creator_id", identity.id).select("id").single<{ id: string }>());
+      // Re-embed on any change to the embedded input (title, body, or section
+      // headings/ranges); pricing/access-mode edits don't affect the vectors.
+      if (input.title !== undefined || input.body !== undefined || input.sections !== undefined) {
+        void syncEmbeddings(articleId);
+      }
       return this.getArticle(articleId);
     },
 
@@ -813,6 +846,8 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
           .select("id")
           .single<{ id: string }>(),
       );
+      // Now live: populate the semantic index for this article's sections.
+      void syncEmbeddings(articleId);
       return this.getArticle(articleId);
     },
 
@@ -827,6 +862,8 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
           .select("id")
           .single<{ id: string }>(),
       );
+      // No longer live: drop its rows so stale hits don't surface in search.
+      void syncEmbeddings(articleId);
       return this.getArticle(articleId);
     },
 
@@ -841,6 +878,8 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
           .select("id")
           .single<{ id: string }>(),
       );
+      // No longer live: drop its rows so stale hits don't surface in search.
+      void syncEmbeddings(articleId);
     },
 
     async deleteArticle(articleId: string): Promise<void> {
