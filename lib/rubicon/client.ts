@@ -6,6 +6,7 @@
  * article, pricing, and wallet data.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { RECEIVING_NETWORK } from "../chain";
 import { accessModeOf, canPublishPaid, selectReadEvents } from "./access";
 import { parseSections } from "./sections";
 import { generateExtensionToken, hashExtensionToken, tokenPrefix } from "./extension-tokens";
@@ -470,6 +471,7 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
         .from("creator_wallets")
         .select("address")
         .eq("creator_id", creatorId)
+        .eq("network", RECEIVING_NETWORK)
         .maybeSingle<{ address: string | null }>(),
     );
     return wallet?.address ?? null;
@@ -612,6 +614,7 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
           .from("creator_wallets")
           .select("creator_id, address, network, verified")
           .eq("creator_id", identity.id)
+          .eq("network", RECEIVING_NETWORK)
           .maybeSingle<WalletRow>(),
       );
       return {
@@ -633,7 +636,7 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
               network: input.network,
               verified: input.verified ?? false,
             },
-            { onConflict: "creator_id" },
+            { onConflict: "creator_id,network" },
           )
           .select("creator_id, address, network, verified")
           .single<WalletRow>(),
@@ -826,6 +829,7 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
             .from("creator_wallets")
             .select("verified")
             .eq("creator_id", identity.id)
+            .eq("network", RECEIVING_NETWORK)
             .maybeSingle<{ verified: boolean }>(),
         );
         if (!canPublishPaid(article.price_per_word_atomic, wallet?.verified ?? false)) {
