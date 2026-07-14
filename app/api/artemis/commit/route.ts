@@ -4,6 +4,7 @@ import { importFromUrl } from "@/lib/import";
 import { isValidOnboardingPrice } from "@/lib/import/onboarding-pricing";
 import { ImportServerError, serviceClient } from "@/lib/rubicon/import-server";
 import { parseSections } from "@/lib/rubicon/sections";
+import { syncArticleEmbeddingsBestEffort } from "@/lib/rubicon/embeddings";
 
 export const runtime = "nodejs";
 
@@ -166,6 +167,10 @@ export async function POST(request: Request) {
         .update({ default_price_per_word_atomic: String(Math.round(body.globalPricePerWordCents * 10_000)) })
         .eq("id", creatorId);
     }
+
+    // These articles are published live, so seed the semantic-search index now.
+    // Best-effort: a failure just defers to lexical scoring until the next sync.
+    await syncArticleEmbeddingsBestEffort(supabase, articleRows.map((item) => item.articleId));
 
     return NextResponse.json({ imported: articleRows.length, articleIds: articleRows.map((item) => item.articleId) });
   } catch (cause) {

@@ -62,12 +62,14 @@ describe("X UserArticlesTweets route", () => {
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes("freshQueryId_123456789/UserArticlesTweets"))).toBe(true);
   });
 
-  it("explains that profile-wide listing needs an X session", async () => {
+  it("explains when the public fallback is unavailable", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unavailable", { status: 503 })));
+
     const response = await GET(new Request("http://localhost/api/x/articles?userId=789&handle=gemwriter"));
     const body = await response.json() as { error: { message: string } };
 
     expect(response.status).toBe(503);
-    expect(body.error.message).toContain("requires an X session");
+    expect(body.error.message).toContain("Bulk X article import isn't available");
   });
 
 });

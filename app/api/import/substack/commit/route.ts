@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authenticatePrivyRequest } from "@/lib/import/substack-export-auth";
 import { isValidOnboardingPrice } from "@/lib/import/onboarding-pricing";
 import { ImportServerError, serviceClient } from "@/lib/rubicon/import-server";
+import { syncArticleEmbeddingsBestEffort } from "@/lib/rubicon/embeddings";
 
 export const runtime = "nodejs";
 
@@ -99,6 +100,12 @@ export async function POST(request: Request) {
     if (hasValidGlobalPrice && globalPriceCents > 0) {
       await supabase.from("creators").update({ default_price_per_word_atomic: String(Math.round(globalPriceCents * 10_000)) }).eq("id", creatorId);
     }
+    // Only `goLive` commits create live articles; drafts have nothing for the
+    // gateway to serve yet, so skip the embed until they're published.
+    if (body.goLive && articleRows.length) {
+      await syncArticleEmbeddingsBestEffort(supabase, articleRows.map((item) => item.articleId));
+    }
+
     return NextResponse.json({ imported: articleRows.length, articleIds: articleRows.map((item) => item.articleId) });
   } catch (cause) {
     if (cause instanceof ImportServerError) return responseError(cause.status, cause.code, cause.message);

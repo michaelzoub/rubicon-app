@@ -107,6 +107,10 @@ export function useRubiconClient(): RubiconClient | null {
       supabaseUrl: SUPABASE_URL,
       supabaseAnonKey: SUPABASE_ANON_KEY,
       getToken: async () => getSupabaseToken(await getAccessToken()),
+      // Raw Privy token for the server-only embeddings sync route, which
+      // verifies it with `authenticatePrivyRequest` (the Supabase token above
+      // is for RLS-scoped DB access, not for Privy verification).
+      getPrivyToken: () => getAccessToken(),
       getIdentity: () =>
         user
           ? {
