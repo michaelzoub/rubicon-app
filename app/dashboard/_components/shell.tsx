@@ -334,7 +334,7 @@ function MobileBar({ onLogout, activePath }: { onLogout?: () => void; activePath
   const pathname = usePathname();
   const currentPath = activePath ?? pathname;
   return (
-    <div className="sticky top-0 z-30 border-b border-[var(--line)] bg-white/90 backdrop-blur lg:hidden">
+    <div className="dashboard-mobile-bar sticky top-0 z-30 border-b border-[var(--line)] bg-white/90 backdrop-blur lg:hidden">
       <div className="flex items-center justify-between px-5 py-3">
         <a href="https://rubiconpay.xyz" className="flex items-center" aria-label="Rubicon home">
           <RubiconBrand className="h-7" onLight src="/w_logo.svg" />
@@ -345,7 +345,7 @@ function MobileBar({ onLogout, activePath }: { onLogout?: () => void; activePath
           </button>
         )}
       </div>
-      <nav className="flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Dashboard">
+      <nav className="dashboard-mobile-nav flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Dashboard">
         {navSections.flatMap((section) => section.items).map((item) => {
           const active = item.exact ? currentPath === item.href : currentPath.startsWith(item.href);
           return (

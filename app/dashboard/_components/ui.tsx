@@ -272,7 +272,7 @@ export function SafetyWarning({
       className="flex items-start gap-3 rounded-xl border border-[#efcbc8] bg-[#fde4e2] px-4 py-3.5 text-sm text-[#8d2f2d]"
     >
       <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#d4302b] opacity-75" />
+        <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-[#d4302b] opacity-75" />
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#c5221c]" />
       </span>
       <div className="grid gap-1">

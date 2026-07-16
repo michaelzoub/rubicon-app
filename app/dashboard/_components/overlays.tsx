@@ -61,16 +61,15 @@ export function DashboardOverlayProvider({ children }: { children: ReactNode }) 
       {root && createPortal(
         <AnimatePresence initial={false}>
           {activeDialog && (
-            <motion.button
+            <motion.div
               key="dashboard-dialog-backdrop"
-              type="button"
-              aria-label={activeDialog.dismissOnBackdrop ? "Close dialog" : "Dialog backdrop"}
+              aria-hidden="true"
               className="fixed inset-0 cursor-default bg-black/35"
               style={{ zIndex: "var(--dashboard-z-backdrop)" }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: reduceMotion ? 0.01 : 0.16, ease: [0.23, 1, 0.32, 1] }}
+              transition={{ duration: reduceMotion ? 0.12 : 0.16, ease: [0.23, 1, 0.32, 1] }}
               onClick={() => {
                 if (activeDialog.dismissOnBackdrop) activeDialog.onClose();
               }}
@@ -186,7 +185,7 @@ export function DashboardDialog({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0.01 : 0.16, ease: [0.23, 1, 0.32, 1] }}
+          transition={{ duration: reduceMotion ? 0.12 : 0.16, ease: [0.23, 1, 0.32, 1] }}
           aria-hidden={!isTop}
         >
           <motion.div
@@ -200,7 +199,7 @@ export function DashboardDialog({
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(8px) scale(0.98)" }}
             animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(4px) scale(0.99)" }}
-            transition={{ duration: reduceMotion ? 0.01 : 0.2, ease: [0.23, 1, 0.32, 1] }}
+            transition={{ duration: reduceMotion ? 0.14 : 0.2, ease: [0.23, 1, 0.32, 1] }}
           >
             {children}
           </motion.div>

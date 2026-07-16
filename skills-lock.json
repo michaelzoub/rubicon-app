@@ -1,47 +1,17 @@
 {
   "version": 1,
   "skills": {
-    "12-principles-of-animation": {
-      "source": "raphaelsalaja/skill",
+    "apple-design": {
+      "source": "emilkowalski/skills",
       "sourceType": "github",
-      "skillPath": "skills/12-principles-of-animation/SKILL.md",
-      "computedHash": "fd8f83df6be0cebd89ac8c5e5345f7b5f4028a5e32f98f1699d52fa5008c7082"
-    },
-    "better-ui": {
-      "source": "jakubkrehel/skills",
-      "sourceType": "github",
-      "skillPath": "skills/better-ui/SKILL.md",
-      "computedHash": "cb08e0fc63bdd829277770815d645979e0661ae5717dfb01e39a921138b684da"
-    },
-    "emil-design-eng": {
-      "source": "emilkowalski/skill",
-      "sourceType": "github",
-      "skillPath": "skills/emil-design-eng/SKILL.md",
-      "computedHash": "8bdf9e4e6de7a4969147bf4828a4ad2c5aacd9fba4b690b250a85e0467ca387d"
+      "skillPath": "skills/apple-design/SKILL.md",
+      "computedHash": "8b94db67cb9edaad5f1501010804caa610131f1d2dfda0a27664b2e858deade3"
     },
     "improve": {
       "source": "shadcn/improve",
       "sourceType": "github",
       "skillPath": "skills/improve/SKILL.md",
       "computedHash": "39a9358732dcff385e9e4d3e60b4547856f834e54a58b35e455aa9bd49928c13"
-    },
-    "improve-ui": {
-      "source": "ibelick/ui-skills",
-      "sourceType": "github",
-      "skillPath": "skills/improve-ui/SKILL.md",
-      "computedHash": "5bd7689c5508c6bd8166f796b3d1bd32255077447595b14b60fac9847dce63f1"
-    },
-    "make-interfaces-feel-better": {
-      "source": "jakubkrehel/make-interfaces-feel-better",
-      "sourceType": "github",
-      "skillPath": "skills/make-interfaces-feel-better/SKILL.md",
-      "computedHash": "8e3423e467eae12f3748ca1a365a668105ac59dbb0fdd50e66b45a40bb581950"
-    },
-    "userinterface-wiki": {
-      "source": "raphaelsalaja/userinterface-wiki",
-      "sourceType": "github",
-      "skillPath": "skills/SKILL.md",
-      "computedHash": "7bd58aa2aaf874dd421b18700ee688b02ce72276612d7115ad6849d4878e115e"
     }
   }
 }

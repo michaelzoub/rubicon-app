@@ -48,6 +48,7 @@ const previewArticles = [
   { id: "article_bundle_economics", title: "The New Bundle Economics", words: 6330, reads: 18, earnings: "$46.33", state: "live" as const },
   { id: "article_machine_audiences", title: "Writing for Machine Audiences", words: 5810, reads: 15, earnings: "$25.76", state: "draft" as const },
 ];
+const livePreviewArticles = previewArticles.filter((article) => article.state === "live");
 
 const historicalPreviewArticles = [
   ...previewArticles,
@@ -110,11 +111,16 @@ export default function DashboardPreviewPage() {
           sparklineDetails: earningsTrend.map((bar) => `${formatUsd(bar.value)} earned`),
           context: "Last 7 days",
         },
-        { label: "Live articles", value: 3, format: formatInt, context: "Published now" },
+        {
+          label: "Live articles",
+          value: livePreviewArticles.length,
+          format: formatInt,
+          context: "Available to agents",
+        },
         { label: "Agent reads", value: 183, format: formatInt, deltaPct: 11, context: "Last 7 days" },
       ],
       trendBars: earningsTrend,
-      topArticles: previewArticles.slice(0, 6).map((article) => ({
+      topArticles: livePreviewArticles.map((article) => ({
         id: article.id,
         title: article.title,
         earnings: article.earnings,
