@@ -208,8 +208,9 @@ describe("query and client boundaries", () => {
     expect(clickhouse.distinctTotals).toContain("event_version = 1");
     expect(clickhouse.distinctTotals).toContain("read_bundle_committed");
     expect(clickhouse.recentReads).toContain("arrayJoin(bundle_ids)");
-    expect(clickhouse.recentReads).toContain("FROM `analytics`.`analytics_events` FINAL");
-    expect(clickhouse.recentReads).toContain("event_type = 'read_bundle_committed'");
+    expect(clickhouse.recentReads).toContain("FROM `analytics`.`analytics_events` AS reads FINAL");
+    expect(clickhouse.recentReads).toContain("reads.event_type = 'read_bundle_committed'");
+    expect(clickhouse.recentReads).toContain("reads.occurred_at >= toDateTime64");
     expect(clickhouse.recentReads).not.toContain("FROM `analytics`.`recent_reads`");
     expect(clickhouse.topArticles).toContain("ORDER BY sum(settled_creator_earnings_atomic) DESC");
     expect(postgresQueries.totals).toContain("FROM read_bundles");
