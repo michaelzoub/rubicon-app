@@ -53,10 +53,9 @@ export function createAnalyticsService(
         freshness: freshness(result.latestEventAt, generatedAt, config.staleAfterMs),
         totals: { ...result.totals, pendingCreatorAmountAtomic: pendingAtomic(result.totals.creatorAmountAtomic, result.totals.settledCreatorAmountAtomic) },
         daily: result.daily,
-        topArticles: result.topArticles.flatMap((metric) => {
-          const article = articleMetadata.get(metric.articleId);
-          if (!article) return [];
-          return [{
+        topArticles: result.topArticles.map((metric) => {
+          const article = articleMetadata.get(metric.articleId) ?? unavailableArticle(metric.articleId, "paid");
+          return {
             articleId: metric.articleId,
             title: article.title,
             state: article.state,
@@ -69,12 +68,16 @@ export function createAnalyticsService(
             settledCreatorAmountAtomic: metric.settledCreatorAmountAtomic,
             pendingCreatorAmountAtomic: pendingAtomic(metric.creatorAmountAtomic, metric.settledCreatorAmountAtomic),
             lastReadAt: metric.lastReadAt,
-          }];
+          };
         }),
-        recentReads: result.recentReads.flatMap((read) => {
-          const article = articleMetadata.get(read.articleId);
-          return article ? [{ ...read, articleTitle: article.title }] : [];
-        }),
+        // Analytics is the source of truth for completed reads. During a
+        // backfill, a historical/deleted article may no longer have a matching
+        // Supabase row; keep its payment evidence visible instead of silently
+        // deleting it from the dashboard response.
+        recentReads: result.recentReads.map((read) => ({
+          ...read,
+          articleTitle: (articleMetadata.get(read.articleId) ?? unavailableArticle(read.articleId, read.accessMode)).title,
+        })),
       };
     },
 
@@ -359,6 +362,15 @@ function mapRecentRead(row: RecentReadRow): RepositoryRecentRead {
     creatorAmountAtomic: atomic(row.creator_amount_atomic),
     settledCreatorAmountAtomic: atomic(row.settled_creator_amount_atomic),
     settlementStatus: settlementStatus(accessMode, row.settlement_status),
+  };
+}
+
+function unavailableArticle(articleId: string, accessMode: "paid" | "free") {
+  return {
+    id: articleId,
+    title: "Archived article",
+    state: "archived" as const,
+    accessMode,
   };
 }
 

@@ -12,12 +12,13 @@ export function buildAgentActivityHeatmap(
   activity: AnalyticsRecentRead[],
   windowDays = 28,
   now = new Date(),
+  totalReads?: number,
 ): { cells: DashboardActivityHeatCell[]; totalReads: number; windowDays: number } {
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - windowDays);
   const counts = new Map<string, number>();
   const seenSessions = new Set<string>();
-  let totalReads = 0;
+  let totalReadsFromActivity = 0;
 
   for (const row of activity) {
     if (row.settlementStatus === "failed" || seenSessions.has(row.sessionId)) continue;
@@ -28,7 +29,7 @@ export function buildAgentActivityHeatmap(
     const key = `${day}:${hour}`;
     counts.set(key, (counts.get(key) ?? 0) + 1);
     seenSessions.add(row.sessionId);
-    totalReads += 1;
+    totalReadsFromActivity += 1;
   }
 
   const cells: DashboardActivityHeatCell[] = [];
@@ -37,5 +38,5 @@ export function buildAgentActivityHeatmap(
       cells.push({ day, hour, reads: counts.get(`${day}:${hour}`) ?? 0 });
     }
   }
-  return { cells, totalReads, windowDays };
+  return { cells, totalReads: totalReads ?? totalReadsFromActivity, windowDays };
 }

@@ -6470,7 +6470,7 @@ a {
    This final scoped layer wins over older showcase treatments above. */
 .dashboard-theme .dashboard-card {
   border: 1px solid #e9eaec !important;
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: none !important;
 }
 

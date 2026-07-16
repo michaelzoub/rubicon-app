@@ -54,7 +54,7 @@ export default function ImportedDraftReviewPage() {
         <ArrowLeft size={15} aria-hidden="true" /> All articles
       </Link>
       <div>
-        <p className="mono text-xs uppercase tracking-[0.14em] text-[var(--river)]">Imported draft</p>
+        <p className="text-xs font-medium text-[var(--river)]">Imported draft</p>
         <h1 className="mt-2 text-3xl font-semibold">Review before publishing</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">We only import the article you choose. Nothing is posted or published automatically.</p>
       </div>

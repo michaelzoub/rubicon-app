@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@clickhouse/client':
-        specifier: ^1.23.1
-        version: 1.23.1
       '@farcaster/mini-app-solana':
         specifier: ^1.1.3
         version: 1.1.3(@farcaster/miniapp-sdk@0.3.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.4.3))(@solana/wallet-adapter-base@0.9.27(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)))(@solana/wallet-adapter-react@0.15.39(@solana/web3.js@1.98.4(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6))(bs58@6.0.0)(bufferutil@4.1.0)(react-native@0.86.0(@babel/core@7.29.7)(@types/react@19.2.17)(bufferutil@4.1.0)(react@19.2.7)(utf-8-validate@6.0.6))(react@19.2.7)(typescript@5.9.3)(utf-8-validate@6.0.6))(bufferutil@4.1.0)(react@19.2.7)(typescript@5.9.3)(utf-8-validate@6.0.6)
@@ -239,10 +236,6 @@ packages:
 
   '@base-org/account@2.4.0':
     resolution: {integrity: sha512-A4Umpi8B9/pqR78D1Yoze4xHyQaujioVRqqO3d6xuDFw9VRtjg6tK3bPlwE0aW+nVH/ntllCpPa2PbI8Rnjcug==}
-
-  '@clickhouse/client@1.23.1':
-    resolution: {integrity: sha512-vs3/Zc1dHvT171btW5nMoPsPCJ6QVJ5pp7obxzO5sjqwFx/jjz9wwCAqcFOdc2DhprugDBaVn+4dVY8hG3A9nw==}
-    engines: {node: '>=20'}
 
   '@coinbase/cdp-sdk@1.51.1':
     resolution: {integrity: sha512-U/GQIhrezdu94KwkG1Xl3713DHVCTJXT1/K7L3aKyH7dcWv1k7cpaAYX+/3HVSfe/ZiAoMEZ8USKuin39iUexA==}
@@ -6678,8 +6671,6 @@ snapshots:
       - use-sync-external-store
       - utf-8-validate
       - zod
-
-  '@clickhouse/client@1.23.1': {}
 
   '@coinbase/cdp-sdk@1.51.1(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)':
     dependencies:

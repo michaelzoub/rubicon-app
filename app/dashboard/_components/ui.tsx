@@ -51,7 +51,7 @@ export function Card({
 export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3.5">
-      <h2 className="text-base font-semibold">{title}</h2>
+      <h2 className="text-sm font-medium text-[var(--muted)]">{title}</h2>
       {action}
     </div>
   );
@@ -65,6 +65,7 @@ export function StatTile({
   featured = false,
   sparkline,
   quietLabel = false,
+  compact = false,
 }: {
   label: string;
   value: ReactNode;
@@ -73,28 +74,33 @@ export function StatTile({
   featured?: boolean;
   sparkline?: ReactNode;
   quietLabel?: boolean;
+  compact?: boolean;
 }) {
   return (
     <Card
-      className={`grid h-full min-h-[116px] grid-rows-[auto_1fr_auto] p-3.5 ${featured ? "text-white" : ""}`}
+      className={`relative isolate grid h-full grid-rows-[auto_1fr_auto] overflow-hidden ${compact ? "min-h-[92px] p-3.5" : "min-h-[116px] p-4"} ${featured ? "text-white" : ""}`}
       style={featured ? { background: "var(--tile-featured)", borderColor: "transparent" } : undefined}
     >
+      {sparkline && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[78%] overflow-hidden opacity-[0.16]" aria-hidden="true">
+          {sparkline}
+        </div>
+      )}
       <div
-        className={`mono flex items-start uppercase leading-4 ${quietLabel ? "text-[0.58rem] tracking-[0.075em]" : "text-[0.65rem] tracking-[0.1em]"} ${
+        className={`relative z-10 flex items-start text-[0.76rem] font-medium leading-4 ${
           featured ? "text-white/55" : quietLabel ? "text-[var(--quiet)]" : "text-[var(--muted)]"
         }`}
       >
         {label}
       </div>
-      <div className="flex items-center py-1 text-[1.45rem] font-semibold leading-none tracking-[-0.025em] tabular-nums">{value}</div>
-      <div>
+      <div className={`relative z-10 flex items-start text-[1.55rem] font-semibold leading-none tracking-[-0.035em] tabular-nums ${compact ? "pt-2" : "pt-2.5"}`}>{value}</div>
+      <div className={`relative z-10 ${compact ? "mt-2" : "mt-4"}`}>
         {(hint || context) && (
-          <div className="flex min-w-0 items-center justify-between gap-2 text-[0.68rem] leading-4">
-            <span>{hint}</span>
-            {context && <span className={`truncate text-right ${featured ? "text-white/45" : "text-[var(--quiet)]"}`}>{context}</span>}
+          <div className="mono flex min-w-0 items-center justify-between gap-2 text-[0.66rem] leading-4">
+            {context && <span className={`truncate ${featured ? "text-white/45" : "text-[var(--quiet)]"}`}>{context}</span>}
+            <span className="ml-auto">{hint}</span>
           </div>
         )}
-        {sparkline && <div className="mt-1.5">{sparkline}</div>}
       </div>
     </Card>
   );

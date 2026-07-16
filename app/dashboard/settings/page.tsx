@@ -76,7 +76,7 @@ export default function SettingsPage() {
           <Reveal delay={0.04}>
             <Card id="payout-connection" className="scroll-mt-6">
               <CardHeader
-                title="Payout connection"
+                title="Payout"
                 action={
                   <a
                     href="https://faucet.circle.com"

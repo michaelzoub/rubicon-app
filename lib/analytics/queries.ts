@@ -128,22 +128,24 @@ export function clickHouseQueries(database: string): ClickHouseQueries {
         GROUP BY bundle_id
       )
       SELECT
-        reads.bundle_id,
-        reads.session_id,
-        reads.article_id,
-        formatDateTime(reads.occurred_at, '%Y-%m-%dT%H:%i:%S.%fZ', 'UTC') AS occurred_at,
-        reads.access_mode,
-        toString(reads.words_count) AS words_read,
-        toString(reads.gross_amount_atomic) AS creator_amount_atomic,
-        if(settlement.settlement_status = 'completed', toString(reads.gross_amount_atomic), '0') AS settled_creator_amount_atomic,
-        if(reads.access_mode = 'free', 'not_applicable', ifNull(nullIf(settlement.settlement_status, ''), 'pending')) AS settlement_status
-      FROM ${table("recent_reads")} AS reads
+        bundle_id,
+        session_id,
+        article_id,
+        formatDateTime(occurred_at, '%Y-%m-%dT%H:%i:%S.%fZ', 'UTC') AS occurred_at,
+        access_mode,
+        toString(words_count) AS words_read,
+        toString(creator_amount_atomic) AS creator_amount_atomic,
+        if(settlement.settlement_status IN ('confirmed', 'completed'), toString(creator_amount_atomic), '0') AS settled_creator_amount_atomic,
+        if(access_mode = 'free', 'not_applicable', ifNull(nullIf(settlement.settlement_status, ''), 'pending')) AS settlement_status
+      FROM ${table("analytics_events")} FINAL
       LEFT JOIN settlement_by_bundle AS settlement USING (bundle_id)
-      WHERE reads.creator_id = {creatorId:String}
-        AND reads.occurred_at >= toDateTime64({fromTimestamp:String}, 3, 'UTC')
-        AND reads.occurred_at < toDateTime64({toExclusiveTimestamp:String}, 3, 'UTC')
-        AND ({articleId:String} = '' OR reads.article_id = {articleId:String})
-      ORDER BY reads.occurred_at DESC, reads.bundle_id ASC
+      WHERE event_version = 1
+        AND event_type = 'read_bundle_committed'
+        AND creator_id = {creatorId:String}
+        AND occurred_at >= toDateTime64({fromTimestamp:String}, 3, 'UTC')
+        AND occurred_at < toDateTime64({toExclusiveTimestamp:String}, 3, 'UTC')
+        AND ({articleId:String} = '' OR article_id = {articleId:String})
+      ORDER BY occurred_at DESC, bundle_id ASC
       LIMIT {recentReadLimit:UInt32}`,
 
     freshness: `

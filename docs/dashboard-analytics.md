@@ -29,8 +29,8 @@ the schema in `rubicon/apps/gateway/analytics/clickhouse/001_analytics_events.sq
 
 Committed `read_bundle_committed` events supply `words_count`; transfer or
 settlement counts never stand in for words. Distinct sessions supply agent
-reads. Only a `settlement_changed` event with `completed` status contributes to
-settled creator earnings. `confirmed`, `pending`, and `failed` remain distinct;
+reads. A `settlement_changed` event with `confirmed` or `completed` status
+contributes to recognized creator earnings. Settlement statuses remain distinct;
 free reads are `not_applicable`. One settlement may cover multiple bundle ids.
 
 Atomic amounts stay strings across the HTTP contract. ClickHouse stores them as
@@ -55,8 +55,8 @@ silently replacing it with zeros.
 
 ## Configuration
 
-Production should use `ANALYTICS_BACKEND=clickhouse` with the official
-`@clickhouse/client`. `ANALYTICS_BACKEND=postgres` uses `DATABASE_URL` and
+Production should use `ANALYTICS_BACKEND=clickhouse` with the server-side
+native HTTP client. `ANALYTICS_BACKEND=postgres` uses `DATABASE_URL` and
 executes the same bundle-level aggregates on the server for local development
 or controlled fallback.
 

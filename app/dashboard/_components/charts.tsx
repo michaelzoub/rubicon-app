@@ -110,7 +110,7 @@ export function TrendChart({
   return (
     <div className="dashboard-data-viz w-full select-none" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }} accessibilityLayer>
+        <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }} accessibilityLayer>
           <CartesianGrid vertical={false} stroke="var(--line)" strokeDasharray="2 4" />
           <XAxis
             dataKey="label"
@@ -242,7 +242,7 @@ export function Donut({
         {showCenter && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
             <div className="text-xl font-semibold tracking-[-0.01em]">{centerValue}</div>
-            <div className="mono text-[0.58rem] uppercase tracking-[0.12em] text-[var(--muted)]">{centerLabel}</div>
+            <div className="text-[0.68rem] text-[var(--muted)]">{centerLabel}</div>
           </div>
         )}
       </div>

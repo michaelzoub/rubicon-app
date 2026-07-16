@@ -122,6 +122,42 @@ describe("analytics response assembly", () => {
     expect(response.totals.pendingCreatorAmountAtomic).toBe((BigInt(huge) - BigInt(settled)).toString());
   });
 
+  it("keeps ClickHouse read evidence visible when its article no longer has local metadata", async () => {
+    const data: AnalyticsDataRepository = {
+      overview: async () => overviewData({
+        topArticles: [{
+          articleId: "migrated_article",
+          wordsRead: 12,
+          paidWords: 12,
+          agentReads: 1,
+          uniqueAgents: 1,
+          creatorAmountAtomic: "1000",
+          settledCreatorAmountAtomic: "1000",
+          lastReadAt: "2026-07-15T10:00:00.000Z",
+        }],
+        recentReads: [{
+          bundleId: "bundle_1",
+          sessionId: "session_1",
+          articleId: "migrated_article",
+          occurredAt: "2026-07-15T10:00:00.000Z",
+          accessMode: "paid",
+          wordsRead: 12,
+          creatorAmountAtomic: "1000",
+          settledCreatorAmountAtomic: "1000",
+          settlementStatus: "completed",
+        }],
+      }),
+      article: vi.fn(),
+    };
+    const response = await createAnalyticsService(config, {
+      data,
+      metadata: { ...metadata(), articles: async () => new Map() },
+    }).overview("creator_a", range);
+
+    expect(response.topArticles).toMatchObject([{ articleId: "migrated_article", title: "Archived article", state: "archived" }]);
+    expect(response.recentReads).toMatchObject([{ bundleId: "bundle_1", articleTitle: "Archived article", settlementStatus: "completed" }]);
+  });
+
   it("checks article ownership before querying analytics", async () => {
     const data: AnalyticsDataRepository = { overview: vi.fn(), article: vi.fn() };
     const meta = metadata();
@@ -165,14 +201,16 @@ describe("settlement and freshness semantics", () => {
 });
 
 describe("query and client boundaries", () => {
-  it("uses the backend v1 contract, bundle words, distinct sessions, completed settlements, and creator parameters", () => {
+  it("uses the backend v1 contract, bundle words, direct creator-scoped reads, and creator parameters", () => {
     const clickhouse = clickHouseQueries("analytics");
     expect(clickhouse.totals).toContain("creator_daily_metrics");
     expect(clickhouse.daily).toContain("{creatorId:String}");
     expect(clickhouse.distinctTotals).toContain("event_version = 1");
     expect(clickhouse.distinctTotals).toContain("read_bundle_committed");
     expect(clickhouse.recentReads).toContain("arrayJoin(bundle_ids)");
-    expect(clickhouse.recentReads).toContain("settlement_status = 'completed'");
+    expect(clickhouse.recentReads).toContain("FROM `analytics`.`analytics_events` FINAL");
+    expect(clickhouse.recentReads).toContain("event_type = 'read_bundle_committed'");
+    expect(clickhouse.recentReads).not.toContain("FROM `analytics`.`recent_reads`");
     expect(clickhouse.topArticles).toContain("ORDER BY sum(settled_creator_earnings_atomic) DESC");
     expect(postgresQueries.totals).toContain("FROM read_bundles");
     expect(postgresQueries.totals).toContain("COUNT(DISTINCT session_id)");

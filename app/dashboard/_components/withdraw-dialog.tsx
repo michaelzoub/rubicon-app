@@ -185,7 +185,7 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
           {balance.status === "success" && (
             <>
               <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
-                <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Available balance</div>
+                <div className="text-xs font-medium text-[var(--muted)]">Available balance</div>
                 <div className="mt-1 text-xl font-semibold">
                   {balance.availableAtomic === null ? "—" : formatUsdc(available)}
                   <span className="ml-1.5 text-sm font-medium text-[var(--muted)]">USDC</span>

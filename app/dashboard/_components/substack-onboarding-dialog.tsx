@@ -1816,14 +1816,14 @@ export function SubstackOnboardingDialog({
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-[var(--surface-muted)] p-4">
-                <div className="mono text-[0.65rem] uppercase leading-4 tracking-[0.1em] text-[var(--muted)]">Your average post</div>
+                <div className="text-xs font-medium leading-4 text-[var(--muted)]">Your average post</div>
                 <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-[-0.02em]">
                   ${(archive.averageWordCount * (isFree ? 0 : price)).toFixed(2)}
                 </div>
                 <div className="mt-1 text-xs text-[var(--muted)]">{archive.averageWordCount.toLocaleString()} words</div>
               </div>
               <div className="rounded-lg bg-[var(--surface-muted)] p-4">
-                <div className="mono text-[0.65rem] uppercase leading-4 tracking-[0.1em] text-[var(--muted)]">Full archive</div>
+                <div className="text-xs font-medium leading-4 text-[var(--muted)]">Full archive</div>
                 <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-[-0.02em]">
                   ${archiveTotalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>

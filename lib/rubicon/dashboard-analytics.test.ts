@@ -34,4 +34,10 @@ describe("buildAgentActivityHeatmap", () => {
     expect(result.totalReads).toBe(3);
     expect(result.cells.find((cell) => cell.day === 0 && cell.hour === 10)?.reads).toBe(3);
   });
+
+  it("uses the daily aggregate for the displayed total when provided", () => {
+    const result = buildAgentActivityHeatmap([], 28, new Date(2026, 6, 15, 12, 0, 0), 14);
+
+    expect(result.totalReads).toBe(14);
+  });
 });

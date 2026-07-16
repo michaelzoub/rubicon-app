@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Archive, ArrowLeft, Eye, Loader2, Pause, Play, Trash2, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Archive, ArrowLeft, BarChart3, Eye, Loader2, Pause, Play, ReceiptText, Trash2, X } from "lucide-react";
 import type { ArticleAccessMode, ArticleDetail } from "@/lib/rubicon/types";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { useArticleAnalytics } from "@/lib/analytics/hooks";
@@ -16,8 +16,6 @@ import { isStolenXContent, normalizeHandle } from "@/lib/articles/ownership";
 import {
   ArticleStatePill,
   Card,
-  CardHeader,
-  EmptyState,
   ErrorState,
   formatDate,
   formatRelative,
@@ -70,8 +68,8 @@ export default function ArticleDetailPage() {
     : null;
 
   return (
-    <div className="grid gap-6">
-      <Link href="/dashboard/articles" className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] hover:text-[var(--ink)]">
+    <div className="grid gap-5">
+      <Link href="/dashboard/articles" className="inline-flex w-fit items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)]">
         <ArrowLeft size={15} aria-hidden="true" /> All articles
       </Link>
 
@@ -84,10 +82,10 @@ export default function ArticleDetailPage() {
           <div className="flex flex-col gap-4 pb-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-[-0.01em] sm:text-3xl">{data.title}</h1>
+                <h1 className="max-w-3xl text-balance text-2xl font-semibold tracking-[-0.025em] sm:text-3xl">{data.title}</h1>
                 <ArticleStatePill state={data.state} />
                 {data.accessMode === "free" && (
-                  <span className="mono rounded-full bg-[#e8f6ef] px-2.5 py-1 text-[0.66rem] uppercase tracking-[0.12em] text-[#165c3e]">
+                  <span className="rounded-full bg-[#e8f6ef] px-2.5 py-1 text-[0.68rem] text-[#165c3e]">
                     Free
                   </span>
                 )}
@@ -234,35 +232,34 @@ export default function ArticleDetailPage() {
             />
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile label="Words read" value={analyticsData.totals.wordsRead.toLocaleString()} />
-            <StatTile label="Agent reads" value={analyticsData.totals.agentReads.toLocaleString()} />
-            <StatTile label="Earnings" value={data.accessMode === "free" ? "—" : formatUsd(analyticsData.totals.settledCreatorAmountAtomic)} />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile compact label="Words read" value={analyticsData.totals.wordsRead.toLocaleString()} />
+            <StatTile compact label="Agent reads" value={analyticsData.totals.agentReads.toLocaleString()} />
+            <StatTile compact label="Earnings" value={data.accessMode === "free" ? "—" : formatUsd(analyticsData.totals.settledCreatorAmountAtomic)} />
             <StatTile
+              compact
               label={data.accessMode === "free" ? "Access" : "Price per word"}
               value={data.accessMode === "free" ? "Free" : formatUsd(data.pricePerWordAtomic)}
               hint={`${data.totalWords.toLocaleString()} words total`}
             />
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader title="Section usage" />
+          <div className="grid gap-3 lg:grid-cols-2">
+            <Card className="overflow-hidden">
+              <AnalyticsPanelHeader title="Section usage" detail="Words read by section" />
               {analyticsData.sections.length === 0 ? (
-                <div className="p-5">
-                  <EmptyState title="No reads yet" description="When agents read, you’ll see which sections they found useful." />
-                </div>
+                <CompactEmptyState icon={<BarChart3 size={16} />} title="No section data yet" description="Section performance appears after the first read." />
               ) : (
-                <ul className="grid max-h-80 gap-1 overflow-y-auto overflow-x-hidden p-2">
+                <ul className="grid max-h-[250px] gap-0 overflow-y-auto overflow-x-hidden px-4 pb-3">
                   {analyticsData.sections.map((s) => {
                     const max = Math.max(...analyticsData.sections.map((x) => x.wordsRead), 1);
                     return (
-                      <li key={s.sectionId} className="px-5 py-3">
-                        <div className="flex items-start justify-between gap-3 text-sm">
-                          <span className="min-w-0 break-words font-medium">{s.heading}</span>
-                          <span className="shrink-0 text-[var(--muted)]">{s.wordsRead.toLocaleString()} words</span>
+                      <li key={s.sectionId} className="border-t border-[var(--line)] py-2.5 first:border-t-0">
+                        <div className="flex items-start justify-between gap-3 text-[0.8125rem] leading-5">
+                          <span className="min-w-0 truncate font-medium text-[var(--ink)]">{s.heading}</span>
+                          <span className="shrink-0 tabular-nums text-xs text-[var(--muted)]">{s.wordsRead.toLocaleString()} words</span>
                         </div>
-                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-muted)]">
+                        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-muted)]">
                           <div className="h-full rounded-full bg-[var(--river)]" style={{ width: `${(s.wordsRead / max) * 100}%` }} />
                         </div>
                       </li>
@@ -272,52 +269,59 @@ export default function ArticleDetailPage() {
               )}
             </Card>
 
-            <Card>
-              <CardHeader title="Recent reads" />
+            <Card className="overflow-hidden">
+              <AnalyticsPanelHeader title="Recent reads" detail="Latest reading sessions" />
               {analyticsData.recentReads.length === 0 ? (
-                <div className="p-5">
-                  <EmptyState title="No sessions yet" description="Each time a buyer agent reads through your seller agent, it appears here." />
-                </div>
+                <CompactEmptyState icon={<ReceiptText size={16} />} title="No reading sessions yet" description="New sessions will appear here." />
               ) : (
-                <ul className="grid max-h-80 gap-1 overflow-y-auto p-2">
-                  {analyticsData.recentReads.slice(0, 10).map((read) => (
-                    <li key={read.bundleId} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{formatRelative(read.occurredAt)}</div>
-                        <div className="text-xs text-[var(--muted)]">{read.wordsRead.toLocaleString()} words read</div>
-                      </div>
-                      <PaymentStatusPill status={read.settlementStatus} />
-                    </li>
-                  ))}
-                </ul>
+                <div className="max-h-[250px] overflow-auto">
+                  <table className="w-full min-w-[430px] text-left text-[0.8125rem]">
+                    <thead className="sticky top-0 border-b border-[var(--line)] bg-[var(--card)] text-[0.625rem] font-medium uppercase tracking-[0.08em] text-[var(--quiet)]">
+                      <tr>
+                        <th className="px-4 py-2 font-medium">Time</th>
+                        <th className="px-3 py-2 text-right font-medium">Words</th>
+                        <th className="px-3 py-2 text-right font-medium">Amount</th>
+                        <th className="px-4 py-2 text-right font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {analyticsData.recentReads.slice(0, 10).map((read) => (
+                        <tr key={read.bundleId} className="border-t border-[var(--line)] transition-colors hover:bg-[var(--surface-muted)]">
+                          <td className="px-4 py-2.5 font-medium text-[var(--ink)]">{formatRelative(read.occurredAt)}</td>
+                          <td className="px-3 py-2.5 text-right tabular-nums text-[var(--muted)]">{read.wordsRead.toLocaleString()}</td>
+                          <td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatUsd(read.creatorAmountAtomic)}</td>
+                          <td className="px-4 py-2.5 text-right"><PaymentStatusPill status={read.settlementStatus} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </Card>
           </div>
 
-          <Card>
-            <CardHeader title="Payment activity" />
+          <Card className="overflow-hidden">
+            <AnalyticsPanelHeader title="Payment activity" detail="Settlements for this article" />
             {analyticsData.recentReads.length === 0 ? (
-              <div className="p-5">
-                <EmptyState title="No payments yet" description="Paid words for this article will be listed here." />
-              </div>
+              <CompactEmptyState icon={<ReceiptText size={16} />} title="No payment activity yet" description="Settlements will appear here." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[640px] text-sm">
-                  <thead>
-                    <tr className="text-left text-xs uppercase tracking-[0.08em] text-[var(--muted)]">
-                      <th className="px-5 py-3 font-medium">Date</th>
-                      <th className="px-5 py-3 font-medium">Words read</th>
-                      <th className="px-5 py-3 font-medium">Writer amount</th>
-                      <th className="px-5 py-3 font-medium">Status</th>
+                  <thead className="border-b border-[var(--line)]">
+                    <tr className="text-left text-[0.625rem] font-medium uppercase tracking-[0.08em] text-[var(--quiet)]">
+                      <th className="px-4 py-2.5 font-medium">Date</th>
+                      <th className="px-4 py-2.5 font-medium">Words read</th>
+                      <th className="px-4 py-2.5 font-medium">Writer amount</th>
+                      <th className="px-4 py-2.5 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {analyticsData.recentReads.map((row) => (
-                      <tr key={row.bundleId} className="transition-colors hover:bg-[var(--surface-muted)]">
-                        <td className="px-5 py-3">{formatDate(row.occurredAt)}</td>
-                        <td className="px-5 py-3">{row.wordsRead.toLocaleString()}</td>
-                        <td className="px-5 py-3 font-medium">{formatUsd(row.creatorAmountAtomic)}</td>
-                        <td className="px-5 py-3"><PaymentStatusPill status={row.settlementStatus} /></td>
+                      <tr key={row.bundleId} className="border-t border-[var(--line)] transition-colors hover:bg-[var(--surface-muted)]">
+                        <td className="px-4 py-2.5">{formatDate(row.occurredAt)}</td>
+                        <td className="px-4 py-2.5 tabular-nums">{row.wordsRead.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 font-medium tabular-nums">{formatUsd(row.creatorAmountAtomic)}</td>
+                        <td className="px-4 py-2.5"><PaymentStatusPill status={row.settlementStatus} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -327,6 +331,29 @@ export default function ArticleDetailPage() {
           </Card>
         </>
       )}
+    </div>
+  );
+}
+
+function AnalyticsPanelHeader({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-4 py-3.5 sm:px-5">
+      <h2 className="text-[0.8125rem] font-medium text-[var(--ink)]">{title}</h2>
+      <span className="text-right text-[0.6875rem] text-[var(--quiet)]">{detail}</span>
+    </div>
+  );
+}
+
+function CompactEmptyState({ icon, title, description }: { icon: ReactNode; title: string; description: string }) {
+  return (
+    <div className="flex min-h-[112px] items-center gap-3 px-4 py-5">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--river-line)] bg-[var(--river-pale)] text-[var(--river)]">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <h3 className="text-[0.8125rem] font-medium text-[var(--ink)]">{title}</h3>
+        <p className="mt-0.5 text-xs leading-5 text-[var(--muted)]">{description}</p>
+      </div>
     </div>
   );
 }

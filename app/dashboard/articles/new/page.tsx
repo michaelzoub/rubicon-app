@@ -333,7 +333,7 @@ function ImportedSourceBanner({ source, partial }: { source: ImportedSource; par
       <div className="flex items-center gap-2 font-medium">
         <Link2 size={15} aria-hidden="true" />
         Imported from {SOURCE_LABELS[source.platform]}
-        <span className="mono rounded-full bg-white/60 px-2 py-0.5 text-[0.66rem] uppercase tracking-[0.12em]">
+        <span className="rounded-full bg-white/60 px-2 py-0.5 text-[0.68rem]">
           {status}
         </span>
       </div>
@@ -659,7 +659,7 @@ function StepPricing({
         </div>
 
         <div className="rounded-xl bg-[var(--surface-muted)] p-5">
-          <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">
+          <div className="text-xs font-medium text-[var(--muted)]">
             {isFree ? "Access preview" : "Pricing preview"}
           </div>
           {isFree ? (

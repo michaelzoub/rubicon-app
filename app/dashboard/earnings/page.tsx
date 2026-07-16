@@ -23,7 +23,7 @@ export default function EarningsPage() {
   const wallet = useRubiconQuery((c) => c.getWallet(), [], { queryKey: ["wallet"] });
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-5">
       <PageHeader
         title="Earnings"
         description="Payments are routed straight to your receiving wallet. Rubicon never holds your funds."
@@ -43,7 +43,7 @@ export default function EarningsPage() {
       )}
 
       {analytics.data && (
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-3">
           <StatTile label="Completed earnings" value={formatUsd(analytics.data.totals.settledCreatorAmountAtomic)} />
           <StatTile label="Pending earnings" value={formatUsd(analytics.data.totals.pendingCreatorAmountAtomic)} />
           <StatTile label="Agent reads" value={analytics.data.totals.agentReads.toLocaleString()} />
@@ -82,8 +82,8 @@ export default function EarningsPage() {
         {analytics.data && analytics.data.recentReads.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-[0.08em] text-[var(--muted)]">
+              <thead className="border-b border-[var(--line)]">
+                <tr className="text-left text-[0.625rem] font-medium uppercase tracking-[0.08em] text-[var(--quiet)]">
                   <th className="px-5 py-3 font-medium">Date</th>
                   <th className="px-5 py-3 font-medium">Article</th>
                   <th className="px-5 py-3 font-medium">Words read</th>
@@ -94,12 +94,12 @@ export default function EarningsPage() {
               </thead>
               <tbody>
                 {analytics.data.recentReads.map((row) => (
-                  <tr key={row.bundleId} className="transition-colors hover:bg-[var(--surface-muted)]">
+                  <tr key={row.bundleId} className="border-t border-[var(--line)] transition-colors hover:bg-[var(--surface-muted)]">
                     <td className="px-5 py-3 whitespace-nowrap">{formatDate(row.occurredAt)}</td>
                     <td className="px-5 py-3"><span className="block max-w-[200px] truncate">{row.articleTitle}</span></td>
-                    <td className="px-5 py-3">{row.wordsRead.toLocaleString()}</td>
-                    <td className="px-5 py-3">{formatUsd(row.creatorAmountAtomic)}</td>
-                    <td className="px-5 py-3 font-medium">{formatUsd(row.settledCreatorAmountAtomic)}</td>
+                    <td className="px-5 py-3 tabular-nums">{row.wordsRead.toLocaleString()}</td>
+                    <td className="px-5 py-3 tabular-nums">{formatUsd(row.creatorAmountAtomic)}</td>
+                    <td className="px-5 py-3 font-medium tabular-nums">{formatUsd(row.settledCreatorAmountAtomic)}</td>
                     <td className="px-5 py-3"><PaymentStatusPill status={row.settlementStatus} /></td>
                   </tr>
                 ))}

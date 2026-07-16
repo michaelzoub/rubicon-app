@@ -80,7 +80,15 @@ export default function OverviewPage() {
     [analytics.data?.daily],
   );
   const earningsSlices = useMemo(() => buildEarningsSlices(analytics.data?.topArticles ?? []), [analytics.data?.topArticles]);
-  const activityHeatmap = useMemo(() => buildAgentActivityHeatmap(analytics.data?.recentReads ?? []), [analytics.data?.recentReads]);
+  const activityHeatmap = useMemo(
+    () => buildAgentActivityHeatmap(
+      analytics.data?.recentReads ?? [],
+      28,
+      new Date(),
+      countAgentReadsInTrailingDays(analytics.data?.daily ?? [], 28),
+    ),
+    [analytics.data?.daily, analytics.data?.recentReads],
+  );
   const totalEarned = atomicToUsd(analytics.data?.totals.settledCreatorAmountAtomic);
 
   const weeklyDeltas = useMemo(() => buildWeeklyDeltas(analytics.data?.daily ?? []), [analytics.data?.daily]);
@@ -94,17 +102,17 @@ export default function OverviewPage() {
     const paymentRows = analytics.data.recentReads.slice(0, 5).map((row) => ({
       id: row.bundleId,
       title: row.articleTitle,
-      meta: `${formatRelative(row.occurredAt)} · ${row.wordsRead.toLocaleString()} words read`,
+      occurredAt: formatRelative(row.occurredAt),
       amount: formatUsdAtomicDisplay(row.creatorAmountAtomic),
       status: row.settlementStatus,
     }));
     const articleRows = articleList.slice(0, 4).map((article) => ({
       id: article.articleId,
       title: article.title,
-      meta: `${article.wordsRead.toLocaleString()} words read`,
+      wordsRead: article.wordsRead,
       earnings: formatUsdAtomicDisplay(article.settledCreatorAmountAtomic),
       state: article.state,
-      href: `/dashboard/articles/${article.articleId}`,
+      href: article.state === "archived" || article.state === "deleted" ? undefined : `/dashboard/articles/${article.articleId}`,
     }));
     const balanceLabel =
       nativeBalance.status === "loading" ? (
@@ -136,22 +144,22 @@ export default function OverviewPage() {
           value: totalEarned,
           format: formatUsdDisplay,
           deltaPct: weeklyDeltas.earnings,
-          context: "Completed in the selected range",
           sparklineValues: trendBars.map((b) => b.value),
           sparklineLabels: trendBars.map((b) => b.fullLabel),
           sparklineMetricLabel: "Earnings that day",
           sparklineDetails: trendBars.map((b) => `${b.detail ?? "0 words"} read`),
+          context: "Last 7 days",
         },
         {
           label: "Words read",
           value: analytics.data.totals.wordsRead,
           format: formatInt,
           deltaPct: weeklyDeltas.words,
-          context: "Committed bundle words",
           sparklineValues: wordsTrendBars.map((b) => b.value),
           sparklineLabels: wordsTrendBars.map((b) => b.fullLabel),
           sparklineMetricLabel: "Words read that day",
           sparklineDetails: wordsTrendBars.map((b) => `${b.detail ?? formatUsdNumber(0)} earned`),
+          context: "Last 7 days",
         },
         { label: "Live articles", value: (articles.data ?? []).filter((article) => article.state === "live").length, format: formatInt, context: "Published now" },
         {
@@ -159,7 +167,7 @@ export default function OverviewPage() {
           value: analytics.data.totals.agentReads,
           format: formatInt,
           deltaPct: weeklyDeltas.reads,
-          context: "Distinct reading sessions",
+          context: "Last 7 days",
         },
       ],
       trendBars,
@@ -169,7 +177,7 @@ export default function OverviewPage() {
           title: article.title,
           earnings: formatUsdAtomicDisplay(article.settledCreatorAmountAtomic),
           value: atomicToUsd(article.settledCreatorAmountAtomic),
-          href: `/dashboard/articles/${article.articleId}`,
+          href: article.state === "archived" || article.state === "deleted" ? undefined : `/dashboard/articles/${article.articleId}`,
         })),
       breakdown: earningsSlices.length > 0
         ? {
@@ -287,6 +295,17 @@ export default function OverviewPage() {
   );
 }
 
+function countAgentReadsInTrailingDays(daily: AnalyticsDailyMetric[], days: number, now = new Date()): number {
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - days + 1);
+  const cutoffDate = cutoff.toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+  return daily.reduce(
+    (total, row) => total + (row.date >= cutoffDate && row.date <= today ? row.agentReads : 0),
+    0,
+  );
+}
+
 const ONBOARDING_DISMISSED_KEY = "rubicon-onboarding-dismissed";
 
 interface OnboardingStep {
@@ -343,7 +362,7 @@ function OnboardingChecklistCard({
   return (
     <Card className="p-5 sm:p-6">
       <div className="flex items-start justify-between gap-4">
-        <div><p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--muted)]">Creator setup</p><h2 className="mt-1 text-lg font-semibold">Publish your first agent-readable article</h2></div>
+        <div><p className="text-xs font-medium text-[var(--muted)]">Creator setup</p><h2 className="mt-1 text-lg font-semibold">Publish your first agent-readable article</h2></div>
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-sm tabular-nums text-[var(--muted)]">{Math.min(activeIndex + 1, steps.length)} / {steps.length}</span>
           <button type="button" onClick={dismiss} className="text-xs font-medium text-[var(--muted)] transition-colors hover:text-[var(--ink)]">Skip setup</button>
@@ -928,7 +947,7 @@ function IndicatorTile({
     <div className={`rounded-lg border p-4 ${tone === "wait" ? "border-[#eddcbd] bg-[#fdf9f1]" : "border-[var(--line)] bg-[var(--surface-muted)]"}`}>
       <div className="flex items-center gap-2">
         <StatusDot tone={tone} />
-        <span className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">{label}</span>
+        <span className="text-xs font-medium text-[var(--muted)]">{label}</span>
       </div>
       <div className="mt-2.5 text-xl font-semibold tabular-nums tracking-[-0.01em]">{value}</div>
       <div className="mt-1 text-xs leading-5 text-[var(--muted)]">{caption}</div>
@@ -1133,7 +1152,7 @@ function FirstReadPreviewCard({ articles }: { articles: Article[] }) {
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <span className="font-semibold tabular-nums text-[var(--muted)]">{formatUsdNumber(example.amount)}</span>
-                  <span className="mono rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[0.65rem] uppercase tracking-[0.08em] text-[var(--muted)]">
+                  <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[0.68rem] text-[var(--muted)]">
                     Example
                   </span>
                 </div>
@@ -1172,15 +1191,15 @@ function AnalyticsStatusNotice({
 }) {
   if (refreshError) {
     return (
-      <div className="rounded-lg border border-[#eddcbd] bg-[#fdf9f1] px-4 py-3 text-sm text-[#7b4e12]" role="status">
-        Couldn’t refresh analytics. Showing the last successful response.
+      <div className="flex items-center gap-2 rounded-md border border-[#eddcbd] bg-[#fdf9f1] px-3 py-2 text-xs text-[#7b4e12]" role="status">
+        <span className="h-1.5 w-1.5 rounded-full bg-[#b7791f]" aria-hidden="true" /> Couldn’t refresh analytics. Showing the last successful response.
       </div>
     );
   }
   if (!analytics.freshness.stale) return null;
   return (
-    <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--muted)]" role="status">
-      Analytics are delayed. Reads and settlements may take a little longer to appear.
+    <div className="flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]" role="status">
+      <span className="h-1.5 w-1.5 rounded-full bg-[var(--quiet)]" aria-hidden="true" /> Analytics are delayed. Reads and settlements may take a little longer to appear.
     </div>
   );
 }
