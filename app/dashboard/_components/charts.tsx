@@ -11,7 +11,7 @@
  */
 
 import { animate, motion, useReducedMotion } from "framer-motion";
-import { Line, LineChart, ResponsiveContainer, Tooltip } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /* ---------- animated number ---------- */
@@ -76,7 +76,7 @@ export function Reveal({
   );
 }
 
-/* ---------- trend bars ---------- */
+/* ---------- trend line ---------- */
 
 export interface TrendBar {
   /** Short axis label, e.g. "Jun 12". */
@@ -90,8 +90,9 @@ export interface TrendBar {
 }
 
 /**
- * Vertical bar chart for a time series (earnings or reads over time). Bars grow
- * on mount and lift / brighten on hover, with a floating tooltip.
+ * Compact analytics line chart with restrained axes and a detailed hover state.
+ * The values remain the real daily series; the chart only adds enough structure
+ * to make changes over time legible at a glance.
  */
 export function TrendChart({
   bars,
@@ -103,55 +104,60 @@ export function TrendChart({
   height?: number;
 }) {
   const reduce = useReducedMotion();
-  const [active, setActive] = useState<number | null>(null);
   const max = Math.max(...bars.map((b) => b.value), 0);
+  const data = bars.map((bar, index) => ({ ...bar, index }));
 
   return (
-    <div className="dashboard-data-viz select-none">
-      <div className="relative flex items-end gap-1.5" style={{ height }}>
-        {bars.map((bar, i) => {
-          const pct = max > 0 ? (bar.value / max) * 100 : 0;
-          const isActive = active === i;
-          return (
-            <div
-              key={i}
-              className="group relative flex h-full flex-1 cursor-default items-end"
-              onMouseEnter={() => setActive(i)}
-              onMouseLeave={() => setActive((cur) => (cur === i ? null : cur))}
-            >
-              {/* tooltip */}
-              {isActive && bar.value > 0 && (
-                <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-center">
-                  <div className="text-sm font-semibold text-[var(--ink)]">{formatValue(bar.value)}</div>
-                  <div className="mono text-[0.6rem] uppercase tracking-[0.1em] text-[var(--muted)]">{bar.fullLabel}</div>
-                  {bar.detail && <div className="text-[0.7rem] text-[var(--muted)]">{bar.detail}</div>}
+    <div className="dashboard-data-viz w-full select-none" style={{ height }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }} accessibilityLayer>
+          <CartesianGrid vertical={false} stroke="var(--line)" strokeDasharray="2 4" />
+          <XAxis
+            dataKey="label"
+            axisLine={{ stroke: "var(--line)" }}
+            tickLine={false}
+            interval="preserveStartEnd"
+            minTickGap={42}
+            tick={{ fill: "var(--quiet)", fontSize: 10 }}
+            tickMargin={9}
+          />
+          <YAxis
+            axisLine={false}
+            tickLine={false}
+            width={48}
+            domain={[0, max > 0 ? "auto" : 1]}
+            tick={{ fill: "var(--quiet)", fontSize: 10 }}
+            tickFormatter={formatValue}
+            tickCount={4}
+          />
+          <Tooltip
+            cursor={{ stroke: "var(--quiet)", strokeWidth: 1, strokeDasharray: "3 3" }}
+            content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const point = payload[0].payload as TrendBar;
+              return (
+                <div className="min-w-40 rounded-lg border border-[var(--line)] bg-white px-3 py-2.5">
+                  <div className="text-[0.68rem] text-[var(--muted)]">{point.fullLabel}</div>
+                  <div className="mt-0.5 text-sm font-semibold tabular-nums text-[var(--ink)]">{formatValue(point.value)}</div>
+                  {point.detail && <div className="mt-1 text-[0.68rem] text-[var(--muted)]">{point.detail}</div>}
                 </div>
-              )}
-              {/* track */}
-              <div className="absolute inset-x-0 bottom-0 top-0 rounded bg-[var(--surface-muted)] opacity-0 transition-opacity group-hover:opacity-100" />
-              {/* bar */}
-              <motion.div
-                className="relative w-full rounded rounded-b-sm"
-                style={{
-                  minHeight: bar.value > 0 ? 4 : 0,
-                  height: `${pct}%`,
-                  background: isActive ? "var(--river-deep)" : "var(--river)",
-                  transformOrigin: "bottom",
-                }}
-                initial={reduce ? false : { transform: "scaleY(0)" }}
-                animate={{ transform: "scaleY(1)" }}
-                transition={{ duration: 0.38, delay: reduce ? 0 : i * 0.018, ease: [0.23, 1, 0.32, 1] }}
-              />
-            </div>
-          );
-        })}
-      </div>
-      {/* axis */}
-      <div className="mt-2.5 flex items-center justify-between text-[0.62rem] text-[var(--muted)]">
-        <span>{bars[0]?.label}</span>
-        <span>{bars[Math.floor(bars.length / 2)]?.label}</span>
-        <span>{bars[bars.length - 1]?.label}</span>
-      </div>
+              );
+            }}
+            isAnimationActive={false}
+            wrapperStyle={{ outline: "none", pointerEvents: "none", zIndex: 50 }}
+          />
+          <Line
+            type="linear"
+            dataKey="value"
+            stroke="var(--river)"
+            strokeWidth={1.25}
+            dot={false}
+            activeDot={{ r: 3, fill: "var(--ink)", stroke: "white", strokeWidth: 1.5 }}
+            isAnimationActive={!reduce}
+            animationDuration={420}
+          />
+        </LineChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -277,7 +283,7 @@ export function Sparkline({
   formatValue = (value) => String(value),
   color = "var(--ink)",
   height = 40,
-  strokeWidth = 1.5,
+  strokeWidth = 1.25,
 }: {
   values: number[];
   labels?: string[];

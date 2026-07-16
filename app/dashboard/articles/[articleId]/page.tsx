@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Archive, ArrowLeft, Eye, Loader2, Pause, Play, Trash2, X } from "lucide-react";
 import type { ArticleAccessMode, ArticleDetail } from "@/lib/rubicon/types";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
+import { useArticleAnalytics } from "@/lib/analytics/hooks";
 import {
   atomicToUsd,
   formatUsd,
@@ -33,6 +34,7 @@ export default function ArticleDetailPage() {
   const articleId = params.articleId;
   const router = useRouter();
   const article = useRubiconQuery<ArticleDetail>((c) => c.getArticle(articleId), [articleId], { queryKey: ["article"] });
+  const analytics = useArticleAnalytics(articleId);
   const creator = useRubiconQuery((c) => c.getCreator(), [], { queryKey: ["creator"] });
 
   const publish = useRubiconMutation((c, id: string) => c.publishArticle(id));
@@ -42,6 +44,7 @@ export default function ArticleDetailPage() {
   const update = useRubiconMutation((c, ...args: Parameters<typeof c.updateArticle>) => c.updateArticle(...args));
 
   const data = article.data;
+  const analyticsData = analytics.data;
 
   // Content-ownership guard for imported X posts: block publishing when the
   // original author handle doesn't match the logged-in creator's username.
@@ -72,10 +75,11 @@ export default function ArticleDetailPage() {
         <ArrowLeft size={15} aria-hidden="true" /> All articles
       </Link>
 
-      {article.status === "loading" && <LoadingState />}
+      {(article.status === "loading" || (analytics.isPending && !analyticsData)) && <LoadingState />}
       {article.status === "error" && article.error && <ErrorState error={article.error} onRetry={article.refetch} />}
+      {analytics.error && !analyticsData && <ErrorState error={analytics.error} onRetry={() => void analytics.refetch()} />}
 
-      {article.status === "success" && data && (
+      {article.status === "success" && data && analyticsData && (
         <>
           <div className="flex flex-col gap-4 pb-2 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
@@ -146,6 +150,16 @@ export default function ArticleDetailPage() {
               match your account <strong>@{normalizeHandle(creator.data?.username)}</strong>. It can’t be
               published — monetizing someone else’s content isn’t allowed.
             </SafetyWarning>
+          )}
+          {analytics.error && (
+            <div className="rounded-lg border border-[#eddcbd] bg-[#fdf9f1] px-4 py-3 text-sm text-[#7b4e12]" role="status">
+              Couldn’t refresh analytics. Showing the last successful response.
+            </div>
+          )}
+          {!analytics.error && analyticsData.freshness.stale && (
+            <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--muted)]" role="status">
+              Analytics are delayed. Recent reads and settlements may not appear yet.
+            </div>
           )}
           <AgentPreviewDialog article={agentPreviewArticle} open={previewOpen} onClose={() => setPreviewOpen(false)} />
 
@@ -221,9 +235,9 @@ export default function ArticleDetailPage() {
           )}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile label="Words read" value={data.usage.wordsRead.toLocaleString()} />
-            <StatTile label="Agent reads" value={data.usage.agentReads.toLocaleString()} />
-            <StatTile label="Earnings" value={data.accessMode === "free" ? "—" : formatUsd(data.usage.earnings)} />
+            <StatTile label="Words read" value={analyticsData.totals.wordsRead.toLocaleString()} />
+            <StatTile label="Agent reads" value={analyticsData.totals.agentReads.toLocaleString()} />
+            <StatTile label="Earnings" value={data.accessMode === "free" ? "—" : formatUsd(analyticsData.totals.settledCreatorAmountAtomic)} />
             <StatTile
               label={data.accessMode === "free" ? "Access" : "Price per word"}
               value={data.accessMode === "free" ? "Free" : formatUsd(data.pricePerWordAtomic)}
@@ -234,14 +248,14 @@ export default function ArticleDetailPage() {
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader title="Section usage" />
-              {data.sectionUsage.length === 0 ? (
+              {analyticsData.sections.length === 0 ? (
                 <div className="p-5">
                   <EmptyState title="No reads yet" description="When agents read, you’ll see which sections they found useful." />
                 </div>
               ) : (
                 <ul className="grid max-h-80 gap-1 overflow-y-auto overflow-x-hidden p-2">
-                  {data.sectionUsage.map((s) => {
-                    const max = Math.max(...data.sectionUsage.map((x) => x.wordsRead), 1);
+                  {analyticsData.sections.map((s) => {
+                    const max = Math.max(...analyticsData.sections.map((x) => x.wordsRead), 1);
                     return (
                       <li key={s.sectionId} className="px-5 py-3">
                         <div className="flex items-start justify-between gap-3 text-sm">
@@ -259,20 +273,20 @@ export default function ArticleDetailPage() {
             </Card>
 
             <Card>
-              <CardHeader title="Recent seller-agent sessions" />
-              {data.sessions.length === 0 ? (
+              <CardHeader title="Recent reads" />
+              {analyticsData.recentReads.length === 0 ? (
                 <div className="p-5">
                   <EmptyState title="No sessions yet" description="Each time a buyer agent reads through your seller agent, it appears here." />
                 </div>
               ) : (
                 <ul className="grid max-h-80 gap-1 overflow-y-auto p-2">
-                  {data.sessions.map((session) => (
-                    <li key={session.id} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                  {analyticsData.recentReads.slice(0, 10).map((read) => (
+                    <li key={read.bundleId} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
                       <div className="min-w-0">
-                        <div className="truncate font-medium">{formatRelative(session.startedAt)}</div>
-                        <div className="text-xs text-[var(--muted)]">{session.wordsRead.toLocaleString()} words read</div>
+                        <div className="truncate font-medium">{formatRelative(read.occurredAt)}</div>
+                        <div className="text-xs text-[var(--muted)]">{read.wordsRead.toLocaleString()} words read</div>
                       </div>
-                      <span className="shrink-0 font-semibold">{formatUsd(session.earnings)}</span>
+                      <PaymentStatusPill status={read.settlementStatus} />
                     </li>
                   ))}
                 </ul>
@@ -282,7 +296,7 @@ export default function ArticleDetailPage() {
 
           <Card>
             <CardHeader title="Payment activity" />
-            {data.paymentActivity.length === 0 ? (
+            {analyticsData.recentReads.length === 0 ? (
               <div className="p-5">
                 <EmptyState title="No payments yet" description="Paid words for this article will be listed here." />
               </div>
@@ -295,17 +309,15 @@ export default function ArticleDetailPage() {
                       <th className="px-5 py-3 font-medium">Words read</th>
                       <th className="px-5 py-3 font-medium">Writer amount</th>
                       <th className="px-5 py-3 font-medium">Status</th>
-                      <th className="px-5 py-3 font-medium">Settlement</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.paymentActivity.map((row) => (
-                      <tr key={row.id} className="transition-colors hover:bg-[var(--surface-muted)]">
-                        <td className="px-5 py-3">{formatDate(row.date)}</td>
+                    {analyticsData.recentReads.map((row) => (
+                      <tr key={row.bundleId} className="transition-colors hover:bg-[var(--surface-muted)]">
+                        <td className="px-5 py-3">{formatDate(row.occurredAt)}</td>
                         <td className="px-5 py-3">{row.wordsRead.toLocaleString()}</td>
-                        <td className="px-5 py-3 font-medium">{formatUsd(row.creatorAmount)}</td>
-                        <td className="px-5 py-3"><PaymentStatusPill status={row.status} /></td>
-                        <td className="px-5 py-3 mono text-xs text-[var(--muted)]">{row.settlementReference ?? "—"}</td>
+                        <td className="px-5 py-3 font-medium">{formatUsd(row.creatorAmountAtomic)}</td>
+                        <td className="px-5 py-3"><PaymentStatusPill status={row.settlementStatus} /></td>
                       </tr>
                     ))}
                   </tbody>

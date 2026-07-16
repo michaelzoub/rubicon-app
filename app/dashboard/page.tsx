@@ -17,14 +17,21 @@ import {
   X,
 } from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useRubiconQuery, type QueryResult } from "@/lib/rubicon/hooks";
+import { useRubiconQuery } from "@/lib/rubicon/hooks";
+import { useAnalyticsOverview } from "@/lib/analytics/hooks";
+import type { AnalyticsDailyMetric, AnalyticsRecentRead, AnalyticsOverviewResponse } from "@/lib/analytics/types";
+import { buildAgentActivityHeatmap } from "@/lib/rubicon/dashboard-analytics";
 import { atomicToUsd, formatUsdAtomicDisplay, formatUsdDisplay, formatUsdNumber } from "@/lib/rubicon/pricing";
-import type { Article, PaymentActivity } from "@/lib/rubicon/types";
+import type { Article } from "@/lib/rubicon/types";
 import { ACTIVE_CHAIN } from "@/lib/chain";
 import { explorerAddressUrl, formatBalance, useNativeBalance } from "@/lib/onchain";
 import { WithdrawDialog } from "./_components/withdraw-dialog";
 import { CountUp, Donut, DONUT_COLORS, InsightTile, Reveal, type DonutSlice, type TrendBar } from "./_components/charts";
-import { ContentProtectionPolicy, DashboardOverviewContent, type DashboardOverviewProps } from "./_components/overview-content";
+import {
+  ContentProtectionPolicy,
+  DashboardOverviewContent,
+  type DashboardOverviewProps,
+} from "./_components/overview-content";
 import { OnboardingEntryScreen, SubstackOnboardingDialog } from "./_components/substack-onboarding-dialog";
 import {
   ArticleStatePill,
@@ -47,16 +54,11 @@ export default function OverviewPage() {
   const { user } = usePrivy();
   const articles = useRubiconQuery((c) => c.listArticles(), [], { queryKey: ["articles"] });
   const wallet = useRubiconQuery((c) => c.getWallet(), [], { queryKey: ["wallet"] });
-  const earnings = useRubiconQuery((c) => c.getEarnings(), [], { queryKey: ["earnings"] });
-  const activity = useRubiconQuery((c) => c.getPaymentActivity(), [], { queryKey: ["payment-activity"] });
+  const analytics = useAnalyticsOverview();
 
   // Distinguish the first paint (no data yet → skeleton layout) from a
   // background refresh (existing data stays visible with a tiny indicator).
-  const initialLoading = [articles, wallet, earnings].some((q) => q.status === "loading" && !q.data);
-  const refreshing =
-    !initialLoading &&
-    [articles, wallet, earnings, activity].some((q) => q.status === "loading" && q.data);
-  const firstError = [articles, wallet, earnings].find((q) => q.status === "error" && !q.data);
+  const metadataLoading = [articles, wallet].some((q) => q.status === "loading" && !q.data);
 
   const greeting = user?.twitter?.username ? `@${user.twitter.username}` : user?.email?.address ?? "writer";
 
@@ -64,46 +66,45 @@ export default function OverviewPage() {
   const hasArticles = (articles.data?.length ?? 0) > 0;
   const hasLive = (articles.data ?? []).some((a) => a.state === "live");
   const onboardingComplete = !forceNewUser && walletConnected && hasLive;
+  const initialLoading = metadataLoading || (onboardingComplete && analytics.isPending && !analytics.data);
+  const refreshing = !initialLoading && ([articles, wallet].some((q) => q.status === "loading" && q.data) || analytics.isFetching);
+  const firstError = [articles, wallet].find((q) => q.status === "error" && !q.data)?.error
+    ?? (onboardingComplete && !analytics.data ? analytics.error : null);
 
   const trendBars = useMemo(
-    () => buildTrend(activity.data ?? [], "earnings"),
-    [activity.data],
+    () => buildTrend(analytics.data?.daily ?? [], "earnings"),
+    [analytics.data?.daily],
   );
   const wordsTrendBars = useMemo(
-    () => buildTrend(activity.data ?? [], "words"),
-    [activity.data],
+    () => buildTrend(analytics.data?.daily ?? [], "words"),
+    [analytics.data?.daily],
   );
-  const earningsSlices = useMemo(() => buildEarningsSlices(articles.data ?? []), [articles.data]);
-  const hasBreakdown = earningsSlices.length > 0;
+  const earningsSlices = useMemo(() => buildEarningsSlices(analytics.data?.topArticles ?? []), [analytics.data?.topArticles]);
+  const activityHeatmap = useMemo(() => buildAgentActivityHeatmap(analytics.data?.recentReads ?? []), [analytics.data?.recentReads]);
+  const totalEarned = atomicToUsd(analytics.data?.totals.settledCreatorAmountAtomic);
 
-  const avgPerRead =
-    (earnings.data?.agentReads ?? 0) > 0
-      ? atomicToUsd(earnings.data?.settledEarnings) / (earnings.data?.agentReads ?? 1)
-      : 0;
-  const totalEarned = atomicToUsd(earnings.data?.settledEarnings);
-
-  const weeklyDeltas = useMemo(() => buildWeeklyDeltas(activity.data ?? []), [activity.data]);
+  const weeklyDeltas = useMemo(() => buildWeeklyDeltas(analytics.data?.daily ?? []), [analytics.data?.daily]);
   const [copiedWallet, setCopiedWallet] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const nativeBalance = useNativeBalance(wallet.data?.address ?? null);
 
   const overviewProps: DashboardOverviewProps | null = useMemo(() => {
-    if (!onboardingComplete || !earnings.data || !wallet.data) return null;
-    const articleList = articles.data ?? [];
-    const paymentRows = (activity.data ?? []).slice(0, 5).map((row) => ({
-      id: row.id,
+    if (!onboardingComplete || !analytics.data || !wallet.data) return null;
+    const articleList = analytics.data.topArticles;
+    const paymentRows = analytics.data.recentReads.slice(0, 5).map((row) => ({
+      id: row.bundleId,
       title: row.articleTitle,
-      meta: `${formatRelative(row.date)} · ${row.wordsRead.toLocaleString()} words read`,
-      amount: formatUsdAtomicDisplay(row.creatorAmount),
-      status: row.status,
+      meta: `${formatRelative(row.occurredAt)} · ${row.wordsRead.toLocaleString()} words read`,
+      amount: formatUsdAtomicDisplay(row.creatorAmountAtomic),
+      status: row.settlementStatus,
     }));
     const articleRows = articleList.slice(0, 4).map((article) => ({
-      id: article.id,
+      id: article.articleId,
       title: article.title,
-      meta: `${article.usage.wordsRead.toLocaleString()} words read`,
-      earnings: formatUsdAtomicDisplay(article.usage.earnings),
+      meta: `${article.wordsRead.toLocaleString()} words read`,
+      earnings: formatUsdAtomicDisplay(article.settledCreatorAmountAtomic),
       state: article.state,
-      href: `/dashboard/articles/${article.id}`,
+      href: `/dashboard/articles/${article.articleId}`,
     }));
     const balanceLabel =
       nativeBalance.status === "loading" ? (
@@ -123,18 +124,19 @@ export default function OverviewPage() {
         username: greeting,
         avatarUrl: user?.twitter?.profilePictureUrl ?? null,
         totalEarned,
-        wordsRead: earnings.data.wordsPaidFor ?? 0,
-        agentReads: earnings.data.agentReads ?? 0,
-        topArticle: earnings.data.topArticle?.title ?? null,
+        wordsRead: analytics.data.totals.wordsRead,
+        agentReads: analytics.data.totals.agentReads,
+        topArticle: analytics.data.topArticles[0]?.title ?? null,
         trendBars,
       },
-      activityCalendar: buildActivityCalendar(activity.data ?? []),
+      activityCalendar: buildActivityCalendar(analytics.data.daily),
       stats: [
         {
           label: "Total earnings",
           value: totalEarned,
           format: formatUsdDisplay,
           deltaPct: weeklyDeltas.earnings,
+          context: "Completed in the selected range",
           sparklineValues: trendBars.map((b) => b.value),
           sparklineLabels: trendBars.map((b) => b.fullLabel),
           sparklineMetricLabel: "Earnings that day",
@@ -142,33 +144,40 @@ export default function OverviewPage() {
         },
         {
           label: "Words read",
-          value: earnings.data.wordsPaidFor ?? 0,
+          value: analytics.data.totals.wordsRead,
           format: formatInt,
           deltaPct: weeklyDeltas.words,
+          context: "Committed bundle words",
           sparklineValues: wordsTrendBars.map((b) => b.value),
           sparklineLabels: wordsTrendBars.map((b) => b.fullLabel),
           sparklineMetricLabel: "Words read that day",
           sparklineDetails: wordsTrendBars.map((b) => `${b.detail ?? formatUsdNumber(0)} earned`),
         },
-        { label: "Live articles", value: earnings.data.liveArticles ?? 0, format: formatInt },
+        { label: "Live articles", value: (articles.data ?? []).filter((article) => article.state === "live").length, format: formatInt, context: "Published now" },
+        {
+          label: "Agent reads",
+          value: analytics.data.totals.agentReads,
+          format: formatInt,
+          deltaPct: weeklyDeltas.reads,
+          context: "Distinct reading sessions",
+        },
       ],
       trendBars,
-      topArticles: [...articleList]
-        .sort((a, b) => Number(b.usage.earnings) - Number(a.usage.earnings))
-        .slice(0, 3)
+      topArticles: articleList.slice(0, 6)
         .map((article) => ({
-          id: article.id,
+          id: article.articleId,
           title: article.title,
-          earnings: formatUsdAtomicDisplay(article.usage.earnings),
-          href: `/dashboard/articles/${article.id}`,
+          earnings: formatUsdAtomicDisplay(article.settledCreatorAmountAtomic),
+          value: atomicToUsd(article.settledCreatorAmountAtomic),
+          href: `/dashboard/articles/${article.articleId}`,
         })),
       breakdown: earningsSlices.length > 0
         ? {
-            avgPerRead,
-            totalEarned: formatUsdAtomicDisplay(earnings.data.settledEarnings),
+            totalEarned: formatUsdAtomicDisplay(analytics.data.totals.settledCreatorAmountAtomic),
             slices: earningsSlices,
           }
         : null,
+      activityHeatmap,
       paymentRows,
       articleRows,
       wallet: {
@@ -182,10 +191,9 @@ export default function OverviewPage() {
       },
     };
   }, [
-    activity.data,
+    analytics.data,
     articles.data,
-    avgPerRead,
-    earnings.data,
+    activityHeatmap,
     earningsSlices,
     greeting,
     nativeBalance.status,
@@ -212,14 +220,13 @@ export default function OverviewPage() {
     <div className="grid gap-5">
       {initialLoading ? (
         <OnboardingEntryScreen />
-      ) : firstError && firstError.error ? (
+      ) : firstError ? (
         <ErrorState
-          error={firstError.error}
+          error={firstError}
           onRetry={() => {
             articles.refetch();
             wallet.refetch();
-            earnings.refetch();
-            activity.refetch();
+            void analytics.refetch();
           }}
         />
       ) : (
@@ -241,22 +248,23 @@ export default function OverviewPage() {
                 articles={forceNewUser ? [] : articles.data ?? []}
                 walletConnected={forceNewUser ? false : walletConnected}
               />
-              <LaunchMonitorCard
-                articles={forceNewUser ? [] : articles.data ?? []}
-                walletAddress={forceNewUser ? null : wallet.data?.address ?? null}
-                activity={forceNewUser ? [] : activity.data ?? []}
-              />
-              {forceNewUser || (activity.status === "success" && (activity.data?.length ?? 0) === 0) ? (
+                <LaunchMonitorCard
+                  articles={forceNewUser ? [] : articles.data ?? []}
+                  walletAddress={forceNewUser ? null : wallet.data?.address ?? null}
+                  activity={forceNewUser ? [] : analytics.data?.recentReads ?? []}
+                />
+              {forceNewUser || (analytics.data?.recentReads.length ?? 0) === 0 ? (
                 <FirstReadPreviewCard articles={forceNewUser ? [] : articles.data ?? []} />
               ) : (
-                <PaymentActivityCard activity={activity} />
+                <PaymentActivityCard activity={analytics.data?.recentReads ?? []} />
               )}
-              {!forceNewUser && hasArticles && <ArticlesCard articles={articles.data ?? []} hasArticles={hasArticles} />}
+              {!forceNewUser && hasArticles && <ArticlesCard articles={articles.data ?? []} hasArticles={hasArticles} analytics={analytics.data} />}
             </>
           )}
 
           {onboardingComplete && overviewProps && (
             <>
+              <AnalyticsStatusNotice analytics={analytics.data!} refreshError={analytics.error} />
               {wallet.data?.address && (
                 <WithdrawDialog open={withdrawOpen} onClose={() => setWithdrawOpen(false)} walletAddress={wallet.data.address} />
               )}
@@ -390,10 +398,10 @@ function OnboardingChecklistCard({
   );
 }
 
-function PaymentActivityCard({ activity }: { activity: QueryResult<PaymentActivity[]> }) {
-  const rows = activity.status === "success" ? activity.data ?? [] : [];
+function PaymentActivityCard({ activity }: { activity: AnalyticsRecentRead[] }) {
+  const rows = activity;
   const isLive = rows.some(
-    (row) => row.status !== "failed" && Date.now() - new Date(row.date).getTime() < 48 * 3_600_000,
+    (row) => row.settlementStatus !== "failed" && Date.now() - new Date(row.occurredAt).getTime() < 48 * 3_600_000,
   );
   return (
     <Card>
@@ -410,24 +418,7 @@ function PaymentActivityCard({ activity }: { activity: QueryResult<PaymentActivi
           </Link>
         }
       />
-      {activity.status === "loading" && (
-        <ul className="grid gap-1 px-2 pb-2" aria-hidden="true">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <li key={i} className="flex items-center justify-between gap-4 rounded-lg px-3 py-2.5">
-              <div className="min-w-0">
-                <Skeleton className="h-4 w-48" />
-                <Skeleton className="mt-1.5 h-3 w-32" />
-              </div>
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-4 w-14" />
-                <Skeleton className="h-5 w-16" rounded="rounded-md" />
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-      {activity.status === "error" && activity.error && <div className="p-5"><ErrorState error={activity.error} onRetry={activity.refetch} /></div>}
-      {activity.status === "success" && (activity.data?.length ?? 0) === 0 && (
+      {rows.length === 0 && (
         <div className="p-5">
           <EmptyState
             icon={<Activity size={22} aria-hidden="true" />}
@@ -436,19 +427,19 @@ function PaymentActivityCard({ activity }: { activity: QueryResult<PaymentActivi
           />
         </div>
       )}
-      {activity.status === "success" && (activity.data?.length ?? 0) > 0 && (
+      {rows.length > 0 && (
         <ul className="grid gap-1 px-2 pb-2">
-          {activity.data!.slice(0, 5).map((row) => (
-            <li key={row.id} className="flex items-center justify-between gap-4 rounded-lg px-3 py-2.5 hover:bg-[var(--surface-muted)]">
+          {rows.slice(0, 5).map((row) => (
+            <li key={row.bundleId} className="flex items-center justify-between gap-4 rounded-lg px-3 py-2.5 hover:bg-[var(--surface-muted)]">
               <div className="min-w-0">
                 <div className="truncate font-medium">{row.articleTitle}</div>
                 <div className="text-xs text-[var(--muted)]">
-                  {formatRelative(row.date)} · {row.wordsRead.toLocaleString()} words read
+                  {formatRelative(row.occurredAt)} · {row.wordsRead.toLocaleString()} words read
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-semibold">{formatUsdAtomicDisplay(row.creatorAmount)}</span>
-                <PaymentStatusPill status={row.status} />
+                <span className="font-semibold">{formatUsdAtomicDisplay(row.creatorAmountAtomic)}</span>
+                <PaymentStatusPill status={row.settlementStatus} />
               </div>
             </li>
           ))}
@@ -458,7 +449,8 @@ function PaymentActivityCard({ activity }: { activity: QueryResult<PaymentActivi
   );
 }
 
-function ArticlesCard({ articles, hasArticles }: { articles: Article[]; hasArticles: boolean }) {
+function ArticlesCard({ articles, hasArticles, analytics }: { articles: Article[]; hasArticles: boolean; analytics?: AnalyticsOverviewResponse }) {
+  const metricByArticle = new Map((analytics?.topArticles ?? []).map((metric) => [metric.articleId, metric]));
   return (
     <Card>
       <CardHeader
@@ -480,20 +472,21 @@ function ArticlesCard({ articles, hasArticles }: { articles: Article[]; hasArtic
         </div>
       ) : (
         <ul className="grid gap-1 px-2 pb-2">
-          {articles.slice(0, 4).map((a) => (
-            <li key={a.id}>
+          {articles.slice(0, 4).map((a) => {
+            const metric = metricByArticle.get(a.id);
+            return <li key={a.id}>
               <Link href={`/dashboard/articles/${a.id}`} className="flex items-center justify-between gap-4 rounded-lg px-3 py-2.5 hover:bg-[var(--surface-muted)]">
                 <div className="min-w-0">
                   <div className="truncate font-medium">{a.title}</div>
-                  <div className="text-xs text-[var(--muted)]">{a.usage.wordsRead.toLocaleString()} words read</div>
+                  <div className="text-xs text-[var(--muted)]">{metric ? `${metric.wordsRead.toLocaleString()} words read` : "Open for analytics"}</div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold">{formatUsdAtomicDisplay(a.usage.earnings)}</span>
+                  <span className="text-sm font-semibold">{metric ? formatUsdAtomicDisplay(metric.settledCreatorAmountAtomic) : "—"}</span>
                   <ArticleStatePill state={a.state} />
                 </div>
               </Link>
-            </li>
-          ))}
+            </li>;
+          })}
         </ul>
       )}
     </Card>
@@ -955,10 +948,10 @@ function LaunchMonitorCard({
 }: {
   articles: Article[];
   walletAddress: string | null;
-  activity: PaymentActivity[];
+  activity: AnalyticsRecentRead[];
 }) {
   const liveArticles = articles.filter((a) => a.state === "live");
-  const priced = articles.filter((a) => Number(a.pricePerWordAtomic) > 0);
+  const priced = articles.filter((a) => hasPositiveAtomic(a.pricePerWordAtomic));
   const listedWords = liveArticles.reduce((sum, a) => sum + a.totalWords, 0);
   const pricedWords = priced.reduce((sum, a) => sum + a.totalWords, 0);
   const avgPrice = pricedWords > 0 ? priced.reduce((sum, a) => sum + atomicToUsd(a.pricePerWordAtomic) * a.totalWords, 0) / pricedWords : 0;
@@ -966,7 +959,7 @@ function LaunchMonitorCard({
   const shelfValue = priced.reduce((sum, a) => sum + atomicToUsd(a.pricePerWordAtomic) * a.totalWords, 0);
   const avgArticleWords = priced.length > 0 ? Math.round(pricedWords / priced.length) : 0;
   const recentReads = activity.filter(
-    (row) => row.status !== "failed" && Date.now() - new Date(row.date).getTime() < 48 * 3_600_000,
+    (row) => row.settlementStatus !== "failed" && Date.now() - new Date(row.occurredAt).getTime() < 48 * 3_600_000,
   ).length;
 
   const systems: IndicatorTone[] = [
@@ -1073,13 +1066,13 @@ function LaunchMonitorCard({
  * real row looks familiar when it lands.
  */
 function FirstReadPreviewCard({ articles }: { articles: Article[] }) {
-  const priced = articles.filter((a) => Number(a.pricePerWordAtomic) > 0 && a.totalWords > 0);
+  const priced = articles.filter((a) => hasPositiveAtomic(a.pricePerWordAtomic) && a.totalWords > 0);
   const pool = priced.length > 0 ? priced : articles.filter((a) => a.totalWords > 0);
   const examples = pool.slice(0, 2).map((a) => ({
     title: a.title,
     words: a.totalWords,
     amount:
-      Number(a.pricePerWordAtomic) > 0
+      hasPositiveAtomic(a.pricePerWordAtomic)
         ? atomicToUsd(a.pricePerWordAtomic) * a.totalWords
         : a.totalWords * 0.001,
   }));
@@ -1162,6 +1155,36 @@ function formatInt(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
+function hasPositiveAtomic(value: string): boolean {
+  try {
+    return BigInt(value) > BigInt(0);
+  } catch {
+    return false;
+  }
+}
+
+function AnalyticsStatusNotice({
+  analytics,
+  refreshError,
+}: {
+  analytics: AnalyticsOverviewResponse;
+  refreshError: Error | null;
+}) {
+  if (refreshError) {
+    return (
+      <div className="rounded-lg border border-[#eddcbd] bg-[#fdf9f1] px-4 py-3 text-sm text-[#7b4e12]" role="status">
+        Couldn’t refresh analytics. Showing the last successful response.
+      </div>
+    );
+  }
+  if (!analytics.freshness.stale) return null;
+  return (
+    <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--muted)]" role="status">
+      Analytics are delayed. Reads and settlements may take a little longer to appear.
+    </div>
+  );
+}
+
 /* ---------- momentum (week-over-week) ---------- */
 
 interface WeeklyDeltas {
@@ -1172,21 +1195,20 @@ interface WeeklyDeltas {
 }
 
 /** Compares the last 7 days against the 7 days before, for the stat-tile hints. */
-function buildWeeklyDeltas(activity: PaymentActivity[]): WeeklyDeltas {
+function buildWeeklyDeltas(activity: AnalyticsDailyMetric[]): WeeklyDeltas {
   const now = Date.now();
   const week = 7 * 86_400_000;
   const cur = { earnings: 0, words: 0, reads: 0 };
   const prev = { earnings: 0, words: 0, reads: 0 };
   for (const row of activity) {
-    if (row.status === "failed") continue;
-    const t = new Date(row.date).getTime();
+    const t = new Date(`${row.date}T00:00:00.000Z`).getTime();
     if (Number.isNaN(t)) continue;
     const age = now - t;
     const bucket = age < week ? cur : age < 2 * week ? prev : null;
     if (!bucket) continue;
-    bucket.earnings += atomicToUsd(row.creatorAmount);
+    bucket.earnings += atomicToUsd(row.settledCreatorAmountAtomic);
     bucket.words += row.wordsRead;
-    bucket.reads += 1;
+    bucket.reads += row.agentReads;
   }
   const pct = (a: number, b: number): number | null => (b <= 0 ? (a > 0 ? 100 : null) : ((a - b) / b) * 100);
   return {
@@ -1196,7 +1218,7 @@ function buildWeeklyDeltas(activity: PaymentActivity[]): WeeklyDeltas {
   };
 }
 
-function buildActivityCalendar(activity: PaymentActivity[], weeks = 12): Array<{ date: string; count: number }> {
+function buildActivityCalendar(activity: AnalyticsDailyMetric[], weeks = 12): Array<{ date: string; count: number }> {
   const now = new Date();
   const start = new Date(now);
   start.setDate(start.getDate() - weeks * 7 + 1);
@@ -1204,10 +1226,10 @@ function buildActivityCalendar(activity: PaymentActivity[], weeks = 12): Array<{
   const counts = new Map<string, number>();
 
   for (const row of activity) {
-    const date = new Date(row.date);
+    const date = new Date(`${row.date}T00:00:00.000Z`);
     if (Number.isNaN(date.getTime()) || date < start || date > now) continue;
     const key = date.toISOString().slice(0, 10);
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    counts.set(key, (counts.get(key) ?? 0) + row.agentReads);
   }
 
   const days: Array<{ date: string; count: number }> = [];
@@ -1255,8 +1277,8 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Buckets payment activity into the trailing 14 days for the trend chart. */
-function buildTrend(activity: PaymentActivity[], metric: "earnings" | "words", days = 14): TrendBar[] {
+/** Maps the server-aggregated UTC daily series into the trailing trend chart. */
+function buildTrend(activity: AnalyticsDailyMetric[], metric: "earnings" | "words", days = 14): TrendBar[] {
   const buckets = new Map<string, { earnings: number; words: number; date: Date }>();
   const today = new Date();
   for (let i = days - 1; i >= 0; i--) {
@@ -1265,12 +1287,11 @@ function buildTrend(activity: PaymentActivity[], metric: "earnings" | "words", d
     buckets.set(dayKey(d), { earnings: 0, words: 0, date: d });
   }
   for (const row of activity) {
-    if (row.status === "failed") continue;
-    const parsed = new Date(row.date);
+    const parsed = new Date(`${row.date}T00:00:00.000Z`);
     if (Number.isNaN(parsed.getTime())) continue;
     const bucket = buckets.get(dayKey(parsed));
     if (!bucket) continue;
-    bucket.earnings += atomicToUsd(row.creatorAmount);
+    bucket.earnings += atomicToUsd(row.settledCreatorAmountAtomic);
     bucket.words += row.wordsRead;
   }
   return [...buckets.values()].map(({ earnings, words, date }) => {
@@ -1290,9 +1311,9 @@ function buildTrend(activity: PaymentActivity[], metric: "earnings" | "words", d
 }
 
 /** Top-earning articles as a compact three-segment donut, with the remainder folded into "Other". */
-function buildEarningsSlices(articles: Article[]): DonutSlice[] {
+function buildEarningsSlices(articles: AnalyticsOverviewResponse["topArticles"]): DonutSlice[] {
   const earners = articles
-    .map((a) => ({ title: a.title, value: atomicToUsd(a.usage.earnings) }))
+    .map((a) => ({ title: a.title, value: atomicToUsd(a.settledCreatorAmountAtomic) }))
     .filter((a) => a.value > 0)
     .sort((a, b) => b.value - a.value);
   if (earners.length === 0) return [];

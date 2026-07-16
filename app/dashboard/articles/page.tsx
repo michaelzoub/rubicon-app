@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Eye, FileText, Link2, Pause, Pencil, Play } from "lucide-react";
 import type { Article } from "@/lib/rubicon/types";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
+import { useAnalyticsOverview } from "@/lib/analytics/hooks";
 import { formatUsd } from "@/lib/rubicon/pricing";
 import { isStolenXContent } from "@/lib/articles/ownership";
 import {
@@ -22,6 +23,7 @@ import { AgentPreviewDialog } from "./_components/agent-preview-dialog";
 export default function ArticlesPage() {
   const articles = useRubiconQuery((c) => c.listArticles(), [], { queryKey: ["articles"] });
   const creator = useRubiconQuery((c) => c.getCreator(), [], { queryKey: ["creator"] });
+  const analytics = useAnalyticsOverview();
   const publish = useRubiconMutation((c, id: string) => c.publishArticle(id));
   const pause = useRubiconMutation((c, id: string) => c.pauseArticle(id));
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -67,8 +69,9 @@ export default function ArticlesPage() {
         }
       />
 
-      {articles.status === "loading" && <LoadingState />}
+      {(articles.status === "loading" || (analytics.isPending && !analytics.data)) && <LoadingState />}
       {articles.status === "error" && articles.error && <ErrorState error={articles.error} onRetry={articles.refetch} />}
+      {analytics.error && !analytics.data && <ErrorState error={analytics.error} onRetry={() => void analytics.refetch()} />}
 
       {articles.status === "success" && (articles.data?.length ?? 0) === 0 && (
         <EmptyState
@@ -99,6 +102,7 @@ export default function ArticlesPage() {
         <ul className="grid min-w-0 gap-2 p-2">
           {articles.data!.map((article) => {
             const stolen = isStolen(article);
+            const metric = analytics.data?.topArticles.find((candidate) => candidate.articleId === article.id);
             return (
             <li
               key={article.id}
@@ -120,10 +124,16 @@ export default function ArticlesPage() {
                 </div>
                 <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--muted)]">
                   <span>{formatUsd(article.pricePerWordAtomic)} / word</span>
-                  <span>{article.usage.wordsRead.toLocaleString()} words read</span>
-                  <span>{article.usage.agentReads.toLocaleString()} agent reads</span>
-                  <span className="font-medium text-[var(--ink)]">{formatUsd(article.usage.earnings)} earned</span>
-                  <span>Last read {formatRelative(article.usage.lastReadAt)}</span>
+                  {metric ? (
+                    <>
+                      <span>{metric.wordsRead.toLocaleString()} words read</span>
+                      <span>{metric.agentReads.toLocaleString()} agent reads</span>
+                      <span className="font-medium text-[var(--ink)]">{formatUsd(metric.settledCreatorAmountAtomic)} earned</span>
+                      <span>Last read {formatRelative(metric.lastReadAt)}</span>
+                    </>
+                  ) : (
+                    <span>Open the article for its analytics</span>
+                  )}
                 </div>
               </div>
 

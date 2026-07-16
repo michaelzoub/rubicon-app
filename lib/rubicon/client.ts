@@ -7,7 +7,8 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { RECEIVING_NETWORK } from "../chain";
-import { accessModeOf, canPublishPaid, selectReadEvents } from "./access";
+import { accessModeOf, canPublishPaid } from "./access";
+import { AGENTCASH_BASE_NETWORK, isAgentCashEnabled, isEvmAddress } from "./agentcash";
 import { parseSections } from "./sections";
 import { generateExtensionToken, hashExtensionToken, tokenPrefix } from "./extension-tokens";
 import type {
@@ -17,16 +18,13 @@ import type {
   ArticleImportMeta,
   ArticleSection,
   ArticleSourcePlatform,
+  AgentCashWallet,
   CreateArticleInput,
   Creator,
-  EarningsSummary,
   ExtensionTokenSummary,
-  PaymentActivity,
-  PaymentStatus,
-  SectionUsage,
-  SellerAgentSession,
   UpdateArticleInput,
   UpdateCreatorInput,
+  UpdateAgentCashWalletInput,
   UpdateWalletInput,
   Wallet,
 } from "./types";
@@ -91,6 +89,8 @@ type WalletRow = {
   verified: boolean;
 };
 
+type AgentCashWalletRow = WalletRow;
+
 type ArticleRow = {
   id: string;
   creator_id: string;
@@ -143,112 +143,6 @@ type ExtensionTokenRow = {
   revoked_at: string | null;
 };
 
-type StreamSessionRow = {
-  id: string;
-  article_id: string;
-  creator_id: string;
-  words_delivered: number;
-  paid_atomic: string;
-  created_at: string;
-};
-
-type WordPaymentRow = {
-  id: string;
-  payment_id: string;
-  article_id: string;
-  creator_id: string;
-  session_id: string;
-  sequence: number;
-  amount_atomic: string;
-  creator_amount_atomic: string;
-  rubicon_fee_atomic: string;
-  transfer_id: string | null;
-  settlement_id: string | null;
-  settlement_ids: string[] | null;
-  created_at: string;
-};
-
-// The gateway's per-word *delivery* ledger: one row per word streamed to an
-// agent, written whether or not the word was billed. For free articles there
-// are no word_payments, so readership (words read, reading agents, per-section
-// interest) is sourced from here instead. Paid articles keep deriving reads
-// from word_payments so a read always lines up with money that changed hands.
-type WordDeliveryRow = {
-  id: string;
-  article_id: string;
-  creator_id: string;
-  session_id: string;
-  sequence: number;
-  created_at: string;
-};
-
-// The minimal shape read-count/analytics need. Both WordPaymentRow and
-// WordDeliveryRow satisfy it, so the same reducers work for paid and free.
-type ReadEvent = {
-  article_id: string;
-  session_id: string;
-  sequence: number;
-  created_at: string;
-};
-
-// Columns read for the global payment-activity feed (grouped per session).
-type PaymentActivityRow = Pick<
-  WordPaymentRow,
-  | "id"
-  | "article_id"
-  | "session_id"
-  | "amount_atomic"
-  | "creator_amount_atomic"
-  | "rubicon_fee_atomic"
-  | "transfer_id"
-  | "settlement_id"
-  | "settlement_ids"
-  | "created_at"
->;
-
-// Circle Gateway nanopayments settle to a Gateway settlement/transfer UUID, not
-// an on-chain ERC-20 transfer hash. Treat a payment as settled when any of
-// transfer_id / settlement_id / settlement_ids is present, mirroring the
-// gateway's own persistence (apps/gateway/src/repositories/postgres.ts).
-function settlementReferenceOf(
-  payment: Pick<WordPaymentRow, "transfer_id" | "settlement_id" | "settlement_ids">,
-): string | null {
-  return payment.transfer_id ?? payment.settlement_id ?? payment.settlement_ids?.[0] ?? null;
-}
-
-// A Circle Gateway x402 transfer record, as proxied by /api/onchain/x402-transfers.
-// This is the authoritative settlement ledger: the dashboard sources payment
-// activity and settled earnings from here rather than the local DB. The record
-// only knows the wallet it paid — it carries no article/session/fee metadata.
-type GatewayTransfer = {
-  id: string;
-  status: "received" | "batched" | "confirmed" | "completed" | "failed";
-  token: string;
-  fromAddress: string;
-  toAddress: string;
-  amount: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-function paymentStatusFromTransfer(status: GatewayTransfer["status"]): PaymentStatus {
-  if (status === "completed" || status === "confirmed") return "settled";
-  if (status === "failed") return "failed";
-  return "pending";
-}
-
-async function fetchGatewayTransfers(address: string): Promise<GatewayTransfer[]> {
-  const res = await fetch(`/api/onchain/x402-transfers?address=${encodeURIComponent(address)}`, {
-    headers: { accept: "application/json" },
-  }).catch((err: unknown) => {
-    throw toUserFacingRubiconError(err, "Could not load Gateway settlement records.");
-  });
-  if (!res.ok) {
-    throw new RubiconError("backend", res.status, "gateway_transfers_failed", "Could not load Gateway settlement records.");
-  }
-  const body = (await res.json()) as { transfers?: GatewayTransfer[] };
-  return (body.transfers ?? []).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
-}
 
 function toRubiconError(error: { code?: string; message?: string } | null, fallback = "Supabase request failed."): RubiconError {
   const code = error?.code ?? "supabase_error";
@@ -283,15 +177,6 @@ function randomId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
-function sumAtomic(values: Iterable<string | null | undefined>): string {
-  let total = BigInt(0);
-  for (const value of values) {
-    if (!value) continue;
-    total += BigInt(value);
-  }
-  return total.toString();
-}
-
 function mapSection(row: ArticleSectionRow): ArticleSection {
   return {
     id: row.id,
@@ -302,12 +187,6 @@ function mapSection(row: ArticleSectionRow): ArticleSection {
     wordCount: row.word_count,
     ordinal: row.ordinal,
   };
-}
-
-// The per-word events that count as "reads" for an article: deliveries for free
-// articles (no payments exist), payments for paid articles. See ./access.
-function readEventsFor(row: ArticleRow, payments: WordPaymentRow[], deliveries: WordDeliveryRow[]): ReadEvent[] {
-  return selectReadEvents<ReadEvent>(row, payments, deliveries);
 }
 
 function mapImportMeta(row: ArticleRow): ArticleImportMeta | null {
@@ -328,20 +207,7 @@ function mapImportMeta(row: ArticleRow): ArticleImportMeta | null {
 function mapArticle(
   row: ArticleRow,
   sections: ArticleSectionRow[],
-  payments: WordPaymentRow[],
-  sessions: StreamSessionRow[],
-  deliveries: WordDeliveryRow[],
 ): Article {
-  const articlePayments = payments.filter((payment) => payment.article_id === row.id);
-  const articleSessions = sessions.filter((session) => session.article_id === row.id);
-  // Reads come from deliveries for free articles, payments for paid ones;
-  // earnings always come from payments (free articles simply have none).
-  const reads = readEventsFor(row, payments, deliveries);
-  const lastReadAt = reads.reduce<string | null>((latest, read) => {
-    if (!latest || read.created_at > latest) return read.created_at;
-    return latest;
-  }, null);
-
   return {
     id: row.id,
     title: row.title,
@@ -355,12 +221,6 @@ function mapArticle(
     revision: row.revision,
     sellerAgentConfig: row.seller_agent_config,
     sections: sections.filter((section) => section.article_id === row.id).sort((a, b) => a.ordinal - b.ordinal).map(mapSection),
-    usage: {
-      wordsRead: reads.length,
-      agentReads: new Set(articleSessions.map((session) => session.id)).size,
-      earnings: sumAtomic(articlePayments.map((payment) => payment.creator_amount_atomic)),
-      lastReadAt,
-    },
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -381,19 +241,6 @@ async function maybe<T>(promise: PromiseLike<{ data: T | null; error: { code?: s
   });
   if (error && error.code !== "PGRST116") throw toRubiconError(error);
   return data;
-}
-
-// For optional/auxiliary tables: resolve to an empty list on any failure (a
-// missing table, a network blip) instead of throwing, so an optional data
-// source never takes down the surrounding query.
-async function bestEffortRows<T>(promise: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
-  try {
-    const { data, error } = await Promise.resolve(promise);
-    if (error) return [];
-    return data ?? [];
-  } catch {
-    return [];
-  }
 }
 
 export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, getIdentity, getPrivyToken }: RubiconClientOptions) {
@@ -462,21 +309,6 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
     };
   }
 
-  // The creator's receiving wallet is the `to` address used to query Circle's
-  // Gateway transfers. Wallet config is creator settings, not the payment
-  // ledger, so it stays in the DB.
-  async function loadWalletAddress(creatorId: string): Promise<string | null> {
-    const wallet = await maybe(
-      supabase
-        .from("creator_wallets")
-        .select("address")
-        .eq("creator_id", creatorId)
-        .eq("network", RECEIVING_NETWORK)
-        .maybeSingle<{ address: string | null }>(),
-    );
-    return wallet?.address ?? null;
-  }
-
   async function articleContext(creatorId: string, articleId?: string) {
     let articleQuery = supabase
       .from("articles")
@@ -491,51 +323,19 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
     const articleIds = articles.map((article) => article.id);
 
     if (articleIds.length === 0) {
-      return { articles, sections: [], payments: [], sessions: [], deliveries: [] };
+      return { articles, sections: [] };
     }
 
-    const [sections, payments, sessions, deliveries] = await Promise.all([
-      must(
-        supabase
-          .from("article_sections")
-          .select("id, article_id, section_id, heading, level, word_start, word_count, ordinal")
-          .in("article_id", articleIds)
-          .order("ordinal", { ascending: true })
-          .returns<ArticleSectionRow[]>(),
-      ),
-      must(
-        supabase
-          .from("word_payments")
-          .select("id, payment_id, article_id, creator_id, session_id, sequence, amount_atomic, creator_amount_atomic, rubicon_fee_atomic, transfer_id, settlement_id, settlement_ids, created_at")
-          .eq("creator_id", creatorId)
-          .in("article_id", articleIds)
-          .order("created_at", { ascending: false })
-          .returns<WordPaymentRow[]>(),
-      ),
-      must(
-        supabase
-          .from("stream_sessions")
-          .select("id, article_id, creator_id, words_delivered, paid_atomic, created_at")
-          .eq("creator_id", creatorId)
-          .in("article_id", articleIds)
-          .order("created_at", { ascending: false })
-          .returns<StreamSessionRow[]>(),
-      ),
-      // Best-effort: word_deliveries only feeds free-article readership. If the
-      // gateway hasn't provisioned the table yet, degrade to zero reads for free
-      // articles rather than failing the whole dashboard query.
-      bestEffortRows<WordDeliveryRow>(
-        supabase
-          .from("word_deliveries")
-          .select("id, article_id, creator_id, session_id, sequence, created_at")
-          .eq("creator_id", creatorId)
-          .in("article_id", articleIds)
-          .order("created_at", { ascending: false })
-          .returns<WordDeliveryRow[]>(),
-      ),
-    ]);
+    const sections = await must(
+      supabase
+        .from("article_sections")
+        .select("id, article_id, section_id, heading, level, word_start, word_count, ordinal")
+        .in("article_id", articleIds)
+        .order("ordinal", { ascending: true })
+        .returns<ArticleSectionRow[]>(),
+    );
 
-    return { articles, sections, payments, sessions, deliveries };
+    return { articles, sections };
   }
 
   async function replaceSections(articleId: string, body: string, inputSections: CreateArticleInput["sections"] = []) {
@@ -648,10 +448,65 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
       };
     },
 
+    async getAgentCashWallet(): Promise<AgentCashWallet> {
+      if (!isAgentCashEnabled()) {
+        return { address: null, network: null, verified: false };
+      }
+      const identity = requireIdentity(getIdentity);
+      const wallet = await maybe(
+        supabase
+          .from("creator_wallets")
+          .select("creator_id, address, network, verified")
+          .eq("creator_id", identity.id)
+          .eq("network", AGENTCASH_BASE_NETWORK)
+          .maybeSingle<AgentCashWalletRow>(),
+      );
+      return {
+        address: wallet?.address ?? null,
+        network: wallet?.network ?? null,
+        verified: wallet?.verified ?? false,
+      };
+    },
+
+    async updateAgentCashWallet(input: UpdateAgentCashWalletInput): Promise<AgentCashWallet> {
+      if (!isAgentCashEnabled()) {
+        throw new RubiconError("not_found", 404, "not_found", "AgentCash is not available.");
+      }
+      if (!isEvmAddress(input.address)) {
+        throw new RubiconError("validation", 0, "invalid_wallet_address", "Connect a valid EVM wallet before saving it for AgentCash.");
+      }
+      const token = await getPrivyToken?.();
+      if (!token) {
+        throw new RubiconError("auth", 401, "wallet_verification_required", "Sign in again before connecting a Base wallet.");
+      }
+      const response = await fetch("/api/agentcash/wallet", {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ address: input.address }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        wallet?: Pick<AgentCashWallet, "address" | "network" | "verified">;
+        error?: { code?: string; message?: string };
+      };
+      if (!response.ok || !body.wallet?.address || !body.wallet.network) {
+        throw new RubiconError(
+          response.status === 401 ? "auth" : response.status < 500 ? "validation" : "backend",
+          response.status,
+          body.error?.code ?? "wallet_save_failed",
+          body.error?.message ?? "Could not save this Base wallet.",
+        );
+      }
+      return {
+        address: body.wallet.address,
+        network: body.wallet.network,
+        verified: body.wallet.verified,
+      };
+    },
+
     async listArticles(): Promise<Article[]> {
       const identity = requireIdentity(getIdentity);
-      const { articles, sections, payments, sessions, deliveries } = await articleContext(identity.id);
-      return articles.map((article) => mapArticle(article, sections, payments, sessions, deliveries));
+      const { articles, sections } = await articleContext(identity.id);
+      return articles.map((article) => mapArticle(article, sections));
     },
 
     async createArticle(input: CreateArticleInput): Promise<Article> {
@@ -713,52 +568,17 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
         article.total_words = authoritativeWords;
       }
 
-      return mapArticle(article, [], [], [], []);
+      return mapArticle(article, []);
     },
 
     async getArticle(articleId: string): Promise<ArticleDetail> {
       const identity = requireIdentity(getIdentity);
-      const { articles, sections, payments, sessions, deliveries } = await articleContext(identity.id, articleId);
+      const { articles, sections } = await articleContext(identity.id, articleId);
       const article = articles[0];
       if (!article) throw new RubiconError("not_found", 404, "article_not_found", "Article not found.");
-
-      const base = mapArticle(article, sections, payments, sessions, deliveries);
-      const articlePayments = payments.filter((payment) => payment.article_id === articleId);
-      // Per-section interest is a *read* metric, so it follows the same ledger as
-      // usage.wordsRead: deliveries for free articles, payments for paid.
-      const reads = readEventsFor(article, payments, deliveries);
-      const articleSessions: SellerAgentSession[] = sessions
-        .filter((session) => session.article_id === articleId)
-        .map((session) => ({
-          id: session.id,
-          startedAt: session.created_at,
-          wordsRead: session.words_delivered,
-          earnings: sumAtomic(articlePayments.filter((payment) => payment.session_id === session.id).map((payment) => payment.creator_amount_atomic)),
-        }));
-
-      const sectionUsage: SectionUsage[] = base.sections.map((section) => ({
-        sectionId: section.sectionId,
-        heading: section.heading,
-        wordsRead: reads.filter((read) => read.sequence >= section.wordStart && read.sequence < section.wordStart + section.wordCount).length,
-      }));
-
       return {
-        ...base,
+        ...mapArticle(article, sections),
         body: article.body,
-        sessions: articleSessions,
-        sectionUsage,
-        paymentActivity: articlePayments.map((payment) => ({
-          id: payment.id,
-          date: payment.created_at,
-          articleId: payment.article_id,
-          articleTitle: article.title,
-          wordsRead: 1,
-          grossAmount: payment.amount_atomic,
-          platformFee: payment.rubicon_fee_atomic,
-          creatorAmount: payment.creator_amount_atomic,
-          status: settlementReferenceOf(payment) ? "settled" : "pending",
-          settlementReference: settlementReferenceOf(payment),
-        })),
       };
     },
 
@@ -894,113 +714,6 @@ export function createRubiconClient({ supabaseUrl, supabaseAnonKey, getToken, ge
       if (deleted !== true) {
         throw new RubiconError("not_found", 404, "article_not_found", "Article was not found or you do not have permission to delete it.");
       }
-    },
-
-    async getEarnings(): Promise<EarningsSummary> {
-      const identity = requireIdentity(getIdentity);
-      // Settled earnings / words paid come from the Circle Gateway settlement
-      // ledger. Article-level analytics (live count, top article) have no
-      // Gateway equivalent — a transfer record doesn't say which article it
-      // paid for — so they stay DB-derived.
-      const [articles, payments, address] = await Promise.all([
-        must(supabase.from("articles").select("id, title, state").eq("creator_id", identity.id).neq("state", "deleted").returns<Array<Pick<ArticleRow, "id" | "title" | "state">>>()),
-        must(
-          supabase
-            .from("word_payments")
-            .select("id, article_id, creator_amount_atomic")
-            .eq("creator_id", identity.id)
-            .returns<Array<Pick<WordPaymentRow, "id" | "article_id" | "creator_amount_atomic">>>(),
-        ),
-        loadWalletAddress(identity.id),
-      ]);
-
-      const transfers = address ? await fetchGatewayTransfers(address) : [];
-      const settled = transfers.filter((transfer) => paymentStatusFromTransfer(transfer.status) === "settled");
-
-      const topArticle = articles
-        .map((article) => ({
-          id: article.id,
-          title: article.title,
-          earnings: sumAtomic(payments.filter((payment) => payment.article_id === article.id).map((payment) => payment.creator_amount_atomic)),
-        }))
-        .sort((a, b) => Number(BigInt(b.earnings) - BigInt(a.earnings)))[0];
-
-      return {
-        settledEarnings: sumAtomic(settled.map((transfer) => transfer.amount)),
-        wordsPaidFor: settled.length,
-        // Distinct paying agents (by buyer wallet) from the Gateway ledger.
-        agentReads: new Set(transfers.map((transfer) => transfer.fromAddress)).size,
-        liveArticles: articles.filter((article) => article.state === "live").length,
-        topArticle: topArticle && topArticle.earnings !== "0" ? topArticle : null,
-      };
-    },
-
-    async getPaymentActivity(): Promise<PaymentActivity[]> {
-      const identity = requireIdentity(getIdentity);
-
-      // Article attribution lives in word_payments (the gateway-written per-word
-      // ledger), which carries article_id / session_id / amounts. The Circle
-      // Gateway transfer ledger has no article metadata, so it's used only to
-      // resolve settlement *status*, joined on the settlement reference.
-      const [payments, articles, address] = await Promise.all([
-        must(
-          supabase
-            .from("word_payments")
-            .select("id, article_id, session_id, amount_atomic, creator_amount_atomic, rubicon_fee_atomic, transfer_id, settlement_id, settlement_ids, created_at")
-            .eq("creator_id", identity.id)
-            .order("created_at", { ascending: false })
-            .returns<PaymentActivityRow[]>(),
-        ),
-        must(
-          supabase
-            .from("articles")
-            .select("id, title")
-            .eq("creator_id", identity.id)
-            .returns<Array<{ id: string; title: string }>>(),
-        ),
-        loadWalletAddress(identity.id),
-      ]);
-
-      if (payments.length === 0) return [];
-
-      // Best-effort: the activity feed is DB-sourced, so a Circle outage only
-      // costs us status granularity (we fall back to reference presence below).
-      const transfers = address ? await fetchGatewayTransfers(address).catch(() => []) : [];
-      const statusByTransfer = new Map(transfers.map((t) => [t.id, paymentStatusFromTransfer(t.status)]));
-      const titleById = new Map(articles.map((a) => [a.id, a.title]));
-
-      // Collapse per-word rows into one activity row per agent read (session),
-      // falling back to the payment id for any row without a session.
-      const groups = new Map<string, PaymentActivityRow[]>();
-      for (const payment of payments) {
-        const key = payment.session_id || payment.id;
-        const group = groups.get(key);
-        if (group) group.push(payment);
-        else groups.set(key, [payment]);
-      }
-
-      return [...groups.values()]
-        .map((group) => {
-          const first = group[0];
-          const reference = group.map(settlementReferenceOf).find((ref) => ref) ?? null;
-          // Reference present but unknown to the Gateway ledger ⇒ treat as settled
-          // (the gateway only writes a reference once a transfer is recorded).
-          const status: PaymentStatus = reference ? statusByTransfer.get(reference) ?? "settled" : "pending";
-          const date = group.reduce((latest, p) => (p.created_at > latest ? p.created_at : latest), first.created_at);
-          return {
-            id: first.session_id || first.id,
-            date,
-            articleId: first.article_id,
-            articleTitle: titleById.get(first.article_id) ?? "—",
-            wordsRead: group.length,
-            grossAmount: sumAtomic(group.map((p) => p.amount_atomic)),
-            platformFee: sumAtomic(group.map((p) => p.rubicon_fee_atomic)),
-            creatorAmount: sumAtomic(group.map((p) => p.creator_amount_atomic)),
-            status,
-            settlementReference: reference,
-          };
-        })
-        .sort((a, b) => (a.date < b.date ? 1 : -1));
     },
 
     // --- Browser-extension tokens -------------------------------------------

@@ -19,6 +19,14 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
 };
+// envicon:start
+const _enviconEnv = process.env.APP_ENV || process.env.VERCEL_TARGET_ENV || process.env.VERCEL_ENV || process.env.NODE_ENV || 'development';
+const _enviconIcon = _enviconEnv === 'production' || _enviconEnv === 'prod'
+  ? { url: '/w_logo.svg' }
+  : _enviconEnv === 'preview' || _enviconEnv === 'staging' || _enviconEnv === 'test'
+    ? { url: '/env-favicon-preview.png' }
+    : { url: '/env-favicon-development.png' };
+// envicon:end
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://app.rubiconpay.xyz"),
@@ -27,10 +35,7 @@ export const metadata: Metadata = {
     template: "%s · Rubicon",
   },
   description: "Publish writing for AI agents, manage paid reads, and withdraw your earnings.",
-  icons: {
-    icon: "/w_logo.svg",
-    apple: "/w_logo.svg",
-  },
+    icons: [{ url: _enviconIcon.url }]
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { AlertTriangle, Inbox, Loader2, LogIn, RefreshCw } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { RubiconError } from "@/lib/rubicon/client";
-import type { ArticleState, PaymentStatus } from "@/lib/rubicon/types";
+import type { ArticleState } from "@/lib/rubicon/types";
+import type { AnalyticsSettlementStatus } from "@/lib/analytics/types";
 import { ARTICLE_STATE_LABELS } from "@/lib/rubicon/types";
 
 /* ---------- layout ---------- */
@@ -21,7 +22,7 @@ export function PageHeader({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.025em] sm:text-[1.65rem]">{title}</h1>
+        <h1 className="text-[1.35rem] font-semibold tracking-[-0.025em] sm:text-[1.5rem]">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-sm leading-6 text-[var(--muted)]">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -49,7 +50,7 @@ export function Card({
 
 export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
+    <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3.5">
       <h2 className="text-base font-semibold">{title}</h2>
       {action}
     </div>
@@ -60,31 +61,40 @@ export function StatTile({
   label,
   value,
   hint,
+  context,
   featured = false,
   sparkline,
+  quietLabel = false,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
+  context?: ReactNode;
   featured?: boolean;
   sparkline?: ReactNode;
+  quietLabel?: boolean;
 }) {
   return (
     <Card
-      className={`grid h-full min-h-[104px] grid-rows-[1.65rem_1fr_auto] p-3.5 ${featured ? "text-white" : ""}`}
+      className={`grid h-full min-h-[116px] grid-rows-[auto_1fr_auto] p-3.5 ${featured ? "text-white" : ""}`}
       style={featured ? { background: "var(--tile-featured)", borderColor: "transparent" } : undefined}
     >
       <div
-        className={`mono flex items-start text-[0.65rem] uppercase leading-4 tracking-[0.1em] ${
-          featured ? "text-white/55" : "text-[var(--muted)]"
+        className={`mono flex items-start uppercase leading-4 ${quietLabel ? "text-[0.58rem] tracking-[0.075em]" : "text-[0.65rem] tracking-[0.1em]"} ${
+          featured ? "text-white/55" : quietLabel ? "text-[var(--quiet)]" : "text-[var(--muted)]"
         }`}
       >
         {label}
       </div>
-      <div className="flex items-center text-[1.45rem] font-semibold leading-none tracking-[-0.025em] tabular-nums">{value}</div>
-      <div className="mt-1">
-        {hint && <div className="text-xs">{hint}</div>}
-        {sparkline && <div className="mt-1">{sparkline}</div>}
+      <div className="flex items-center py-1 text-[1.45rem] font-semibold leading-none tracking-[-0.025em] tabular-nums">{value}</div>
+      <div>
+        {(hint || context) && (
+          <div className="flex min-w-0 items-center justify-between gap-2 text-[0.68rem] leading-4">
+            <span>{hint}</span>
+            {context && <span className={`truncate text-right ${featured ? "text-white/45" : "text-[var(--quiet)]"}`}>{context}</span>}
+          </div>
+        )}
+        {sparkline && <div className="mt-1.5">{sparkline}</div>}
       </div>
     </Card>
   );
@@ -117,7 +127,7 @@ export function LoadingState({ label = "Loading…" }: { label?: string }) {
       </div>
       <div className="grid gap-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="flex items-center justify-between gap-5 border-t border-[var(--line)] pt-3 first:border-t-0 first:pt-0">
+          <div key={index} className="flex items-center justify-between gap-5 rounded-lg bg-[var(--surface-muted)] px-3 py-2.5">
             <div className="grid flex-1 gap-2">
               <Skeleton className={`h-3.5 ${index % 2 === 0 ? "w-2/5" : "w-1/3"}`} />
               <Skeleton className={`h-3 ${index % 2 === 0 ? "w-3/5" : "w-1/2"}`} />
@@ -266,16 +276,19 @@ export function ArticleStatePill({ state }: { state: ArticleState }) {
   );
 }
 
-const paymentStyles: Record<PaymentStatus, string> = {
-  settled: "bg-[#dff5e9] text-[#176342]",
+const paymentStyles: Record<AnalyticsSettlementStatus, string> = {
+  not_applicable: "bg-[#eceef4] text-[#5f6470]",
   pending: "bg-[#fff0d5] text-[#80520f]",
+  confirmed: "bg-[#e8f6ef] text-[#176342]",
+  completed: "bg-[#dff5e9] text-[#176342]",
   failed: "bg-[#fde4e2] text-[#963b37]",
 };
 
-export function PaymentStatusPill({ status }: { status: PaymentStatus }) {
+export function PaymentStatusPill({ status }: { status: AnalyticsSettlementStatus }) {
+  const label = status === "not_applicable" ? "Free" : status[0].toUpperCase() + status.slice(1);
   return (
-    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${paymentStyles[status]}`}>
-      {status}
+    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${paymentStyles[status]}`}>
+      {label}
     </span>
   );
 }

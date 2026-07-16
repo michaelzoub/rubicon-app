@@ -978,6 +978,54 @@ a {
   background: rgba(47, 125, 246, 0.14);
 }
 
+/* Dashboard reference surface: quiet, border-led, and information-dense. */
+.dashboard-theme {
+  --surface-muted: #f3f4f6;
+  --card: #ffffff;
+  --ink: #303238;
+  --muted: #777b84;
+  --quiet: #a0a3aa;
+  --line: #e9eaec;
+  --faint: #f1f2f4;
+  --river-pale: #f2f6ff;
+}
+
+.dashboard-canvas {
+  background: #f3f4f6;
+}
+
+.dashboard-sidebar {
+  background: #ffffff !important;
+  border-right: 1px solid var(--line) !important;
+}
+
+.dashboard-card {
+  border: 1px solid var(--line) !important;
+  border-radius: 12px;
+  box-shadow: none !important;
+  transition: border-color 180ms var(--ease-out), background-color 180ms var(--ease-out);
+}
+
+.dashboard-card:hover {
+  border-color: #dfe1e5 !important;
+  box-shadow: none !important;
+}
+
+.dashboard-main > div {
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+.dashboard-nav-link.is-active,
+.dashboard-nav-icon-link.is-active {
+  background: #f3f4f6;
+  color: var(--ink);
+}
+
+.dashboard-nav-link.is-active::before {
+  background: #303238;
+}
+
 button:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--river-deep);
@@ -6417,6 +6465,45 @@ a {
 .dashboard-theme p { text-wrap: pretty; }
 .dashboard-theme .tabular-nums,
 .dashboard-theme [class*="tabular-nums"] { font-variant-numeric: tabular-nums; }
+
+/* Keep the dashboard presentation aligned with the flat analytics reference.
+   This final scoped layer wins over older showcase treatments above. */
+.dashboard-theme .dashboard-card {
+  border: 1px solid #e9eaec !important;
+  border-radius: 12px;
+  box-shadow: none !important;
+}
+
+.dashboard-theme .dashboard-card:hover {
+  border-color: #dfe1e5 !important;
+  box-shadow: none !important;
+}
+
+.dashboard-theme .dashboard-nav-link.is-active,
+.dashboard-theme .dashboard-nav-icon-link.is-active {
+  background: #f3f4f6;
+  box-shadow: none;
+  color: var(--ink);
+}
+
+.dashboard-theme .dashboard-kbd {
+  box-shadow: none;
+  border: 1px solid var(--line);
+}
+
+.dashboard-theme .dashboard-main {
+  margin: 0;
+  border-radius: 0;
+  background: #f3f4f6;
+  box-shadow: none;
+}
+
+.dashboard-theme .button,
+.dashboard-theme input,
+.dashboard-theme textarea,
+.dashboard-theme select {
+  box-shadow: none;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .dashboard-card,

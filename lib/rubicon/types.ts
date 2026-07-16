@@ -56,16 +56,6 @@ export interface ArticleSection {
   ordinal: number;
 }
 
-/** Aggregate usage for an article, as recorded by the gateway. */
-export interface ArticleUsage {
-  wordsRead: number;
-  agentReads: number;
-  /** Earnings in atomic USDC units. */
-  earnings: string;
-  /** ISO timestamp of the most recent agent read, or null if never read. */
-  lastReadAt: string | null;
-}
-
 /** Platforms a draft can be imported from. Mirrors lib/import's ImportSource. */
 export type ArticleSourcePlatform = "substack" | "x" | "artemis";
 
@@ -118,35 +108,12 @@ export interface Article {
   revision: number;
   sellerAgentConfig: Record<string, unknown> | null;
   sections: ArticleSection[];
-  usage: ArticleUsage;
   createdAt: string;
   updatedAt: string;
 }
 
-/**
- * A seller-agent session summary for the article detail page. Intentionally
- * omits buyer-sensitive information (identity, prompts, captured content).
- */
-export interface SellerAgentSession {
-  id: string;
-  startedAt: string;
-  wordsRead: number;
-  /** Earnings from this session, in atomic USDC units. */
-  earnings: string;
-}
-
-/** Per-section usage so creators can see what agents found useful. */
-export interface SectionUsage {
-  sectionId: string;
-  heading: string;
-  wordsRead: number;
-}
-
 export interface ArticleDetail extends Article {
   body: string;
-  sessions: SellerAgentSession[];
-  sectionUsage: SectionUsage[];
-  paymentActivity: PaymentActivity[];
 }
 
 export interface Creator {
@@ -164,35 +131,8 @@ export interface Wallet {
   verified: boolean;
 }
 
-export interface EarningsSummary {
-  /** Settled earnings to date, in atomic USDC units. */
-  settledEarnings: string;
-  wordsPaidFor: number;
-  agentReads: number;
-  liveArticles: number;
-  /** The highest-earning article, when there is activity. */
-  topArticle: { id: string; title: string; earnings: string } | null;
-}
-
-export type PaymentStatus = "settled" | "pending" | "failed";
-
-export interface PaymentActivity {
-  id: string;
-  /** ISO timestamp. */
-  date: string;
-  articleId: string;
-  articleTitle: string;
-  wordsRead: number;
-  /** Gross amount for the words read, in atomic USDC units. */
-  grossAmount: string;
-  /** Rubicon platform fee, in atomic USDC units. Currently always "0". */
-  platformFee: string;
-  /** Amount routed to the creator's wallet, in atomic USDC units. */
-  creatorAmount: string;
-  status: PaymentStatus;
-  /** Settlement reference from the payment provider, when available. */
-  settlementReference: string | null;
-}
+/** Creator-owned recipient for AgentCash's Base-mainnet x402 lane. */
+export interface AgentCashWallet extends Wallet {}
 
 /** Section definition sent when creating or updating an article. */
 export interface ArticleSectionInput {
@@ -237,6 +177,10 @@ export interface UpdateWalletInput {
    * embedded wallet. The gateway only settles payouts to verified wallets.
    */
   verified?: boolean;
+}
+
+export interface UpdateAgentCashWalletInput {
+  address: string;
 }
 
 /** A browser-extension token as shown in Settings (never includes the secret). */

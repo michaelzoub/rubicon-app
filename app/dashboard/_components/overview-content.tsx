@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
@@ -11,17 +11,18 @@ import {
   Download,
   ExternalLink,
   FileText,
-  Link2,
   ImagePlus,
   RefreshCw,
   ShieldCheck,
   Wallet2,
   X,
 } from "lucide-react";
-import type { ArticleState, PaymentStatus } from "@/lib/rubicon/types";
+import type { ArticleState } from "@/lib/rubicon/types";
+import type { AnalyticsSettlementStatus } from "@/lib/analytics/types";
+import type { DashboardActivityHeatCell } from "@/lib/rubicon/dashboard-analytics";
 import { formatUsdDisplay } from "@/lib/rubicon/pricing";
 import { RubiconBrand } from "../../_components/rubicon-brand";
-import { CountUp, Donut, InsightTile, Reveal, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
+import { CountUp, Donut, Reveal, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
 import {
   ArticleStatePill,
   Card,
@@ -40,6 +41,7 @@ export interface DashboardOverviewStat {
   value: number;
   format: (value: number) => string;
   deltaPct?: number | null;
+  context?: string;
   sparklineValues?: number[];
   sparklineLabels?: string[];
   sparklineMetricLabel?: string;
@@ -51,7 +53,7 @@ export interface DashboardOverviewPaymentRow {
   title: string;
   meta: string;
   amount: string;
-  status: PaymentStatus;
+  status: AnalyticsSettlementStatus;
 }
 
 export interface DashboardOverviewArticleRow {
@@ -104,13 +106,18 @@ export interface DashboardOverviewProps {
     id?: string;
     title: string;
     earnings: string;
+    value?: number;
     href?: string;
   }>;
   breakdown?: {
-    avgPerRead: number;
     totalEarned: string;
     slices: DonutSlice[];
   } | null;
+  activityHeatmap?: {
+    cells: DashboardActivityHeatCell[];
+    totalReads: number;
+    windowDays: number;
+  };
   paymentRows: DashboardOverviewPaymentRow[];
   articleRows: DashboardOverviewArticleRow[];
   wallet: DashboardOverviewWallet;
@@ -120,19 +127,22 @@ export interface DashboardOverviewProps {
 }
 
 export function DashboardOverviewContent({
-  greeting,
   exportData,
   stats,
   trendBars,
   topArticles = [],
   breakdown,
+  activityHeatmap,
   paymentRows,
   articleRows,
   wallet,
   refreshing = false,
 }: DashboardOverviewProps) {
+  const hasTopArticles = topArticles.length > 0;
+  const hasBreakdown = Boolean(breakdown && breakdown.slices.length > 0);
+
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3 sm:gap-4">
       <PageHeader
         title="Overview"
         action={
@@ -144,71 +154,67 @@ export function DashboardOverviewContent({
         }
       />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
-        <div className="grid min-w-0 gap-3">
-          <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {stats.map((stat, index) => (
-              <Reveal
-                key={stat.label}
-                delay={index * 0.035}
-                className="relative h-full hover:z-50 focus-within:z-50"
-              >
-                <StatTile
-                  label={stat.label}
-                  value={<CountUp value={stat.value} format={stat.format} />}
-                  hint={stat.deltaPct !== undefined ? <DeltaHint pct={stat.deltaPct} /> : undefined}
-                  sparkline={stat.sparklineValues && stat.sparklineValues.length > 1 ? (
-                    <Sparkline
-                      values={stat.sparklineValues}
-                      labels={stat.sparklineLabels}
-                      metricLabel={stat.sparklineMetricLabel ?? stat.label}
-                      details={stat.sparklineDetails}
-                      formatValue={stat.format}
-                      height={32}
-                    />
-                  ) : undefined}
+      <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat, index) => (
+          <Reveal
+            key={stat.label}
+            delay={index * 0.035}
+            className="relative h-full hover:z-50 focus-within:z-50"
+          >
+            <StatTile
+              label={stat.label}
+              quietLabel
+              value={<CountUp value={stat.value} format={stat.format} />}
+              hint={stat.deltaPct !== undefined ? <DeltaHint pct={stat.deltaPct} /> : undefined}
+              context={stat.context}
+              sparkline={stat.sparklineValues && stat.sparklineValues.length > 1 ? (
+                <Sparkline
+                  values={stat.sparklineValues}
+                  labels={stat.sparklineLabels}
+                  metricLabel={stat.sparklineMetricLabel ?? stat.label}
+                  details={stat.sparklineDetails}
+                  formatValue={stat.format}
+                  height={32}
                 />
-              </Reveal>
-            ))}
-          </div>
+              ) : undefined}
+            />
+          </Reveal>
+        ))}
+      </div>
 
-          <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,1fr)]">
-            <Reveal delay={0.08} className="relative h-full hover:z-50 focus-within:z-50">
-              <MoneyActivityChart bars={exportData?.trendBars ?? trendBars} />
-            </Reveal>
+      <div className="grid min-w-0 gap-3 xl:grid-cols-12">
+        <Reveal delay={0.08} className="relative h-full hover:z-50 focus-within:z-50 xl:col-span-8">
+          <MoneyActivityChart bars={exportData?.trendBars ?? trendBars} />
+        </Reveal>
 
-            {topArticles.length > 0 && (
-              <Reveal delay={0.1} className="h-full">
-                <TopArticlesRanking articles={topArticles} />
-              </Reveal>
-            )}
-          </div>
-
-          {breakdown && breakdown.slices.length > 0 && (
-            <Reveal delay={0.12}>
-              <Card className="p-3.5">
-                <div>
-                  <h2 className="text-base font-semibold">Earnings breakdown</h2>
-                </div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)]">
-                  <InsightTile value={<CountUp value={breakdown.avgPerRead} format={formatUsdDisplay} />} caption="Average earned per agent read" />
-                  <div className="flex min-w-0 items-center overflow-hidden rounded-lg border border-[var(--line)] bg-white p-3.5">
-                    <Donut slices={breakdown.slices} centerValue={breakdown.totalEarned} centerLabel="Total earned" showCenter={false} size={142} stroke={18} />
-                  </div>
-                </div>
-              </Card>
-            </Reveal>
-          )}
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <PaymentActivityRows rows={paymentRows} />
-            <ArticleRows rows={articleRows} />
-          </div>
+        <div className="h-full xl:col-span-4">
+          <WalletCard wallet={wallet} />
         </div>
 
-        <aside className="grid h-fit gap-3 xl:sticky xl:top-5">
-          <WalletCard wallet={wallet} />
-        </aside>
+        {hasTopArticles && (
+          <Reveal delay={0.1} className="h-full xl:col-span-4">
+            <TopArticlesRanking articles={topArticles} />
+          </Reveal>
+        )}
+
+        {hasBreakdown && (
+          <Reveal delay={0.12} className={`h-full ${hasTopArticles ? "xl:col-span-8" : "xl:col-span-12"}`}>
+            <EarningsBreakdown breakdown={breakdown!} />
+          </Reveal>
+        )}
+
+        {activityHeatmap && (
+          <Reveal delay={0.14} className="xl:col-span-12">
+            <AgentActivityHeatmap {...activityHeatmap} />
+          </Reveal>
+        )}
+
+        <div className="xl:col-span-6">
+          <PaymentActivityRows rows={paymentRows} />
+        </div>
+        <div className="xl:col-span-6">
+          <ArticleRows rows={articleRows} />
+        </div>
       </div>
     </div>
   );
@@ -236,8 +242,8 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
         {/* main column */}
         <div className="grid min-w-0 gap-3">
           {/* stat tiles */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i} className="grid min-h-[108px] content-between gap-6 p-4">
                 <Skeleton className="h-3.5 w-20" />
                 <Skeleton className="h-7 w-28" />
@@ -246,8 +252,8 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
           </div>
 
           {/* chart + secondary */}
-          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-            <Card className="min-h-[13rem] p-4">
+          <div className="grid min-w-0 gap-3 xl:grid-cols-12">
+            <Card className="min-h-[17.5rem] p-4 xl:col-span-8">
               <Skeleton className="h-4 w-36" />
               <div className="mt-6 flex h-[9rem] items-end gap-2">
                 {Array.from({ length: 12 }).map((_, i) => (
@@ -255,7 +261,7 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
                 ))}
               </div>
             </Card>
-            <Card className="min-h-[13rem] p-4">
+            <Card className="min-h-[17.5rem] p-4 xl:col-span-4">
               <Skeleton className="h-4 w-28" />
               <div className="mt-6 grid gap-3">
                 {Array.from({ length: 3 }).map((_, i) => (
@@ -300,65 +306,161 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
 }
 
 function TopArticlesRanking({ articles }: { articles: NonNullable<DashboardOverviewProps["topArticles"]> }) {
+  const ranked = articles.slice(0, 6);
+  const total = ranked.reduce((sum, article) => sum + (article.value ?? 0), 0);
+
   return (
-    <Card className="flex h-full min-h-[13rem] flex-col overflow-hidden p-3.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-semibold">Top articles</h2>
-        <span className="text-[0.68rem] text-[var(--muted)]">Ranked by earnings</span>
+    <Card className="flex h-full min-h-[17.5rem] flex-col overflow-hidden">
+      <div className="flex items-end justify-between gap-3 px-4 pb-2 pt-3.5">
+        <div>
+          <h2 className="text-sm font-medium">Top articles</h2>
+          <p className="mt-0.5 text-[0.68rem] text-[var(--quiet)]">Share of settled earnings</p>
+        </div>
+        <span className="text-[0.68rem] tabular-nums text-[var(--muted)]">{ranked.length} ranked</span>
       </div>
-      <ul className="mt-2 flex flex-1 flex-col justify-center">
-        {articles.slice(0, 3).map((article, rank) => {
-          const leader = rank === 0;
-          const row = (
-            <>
-              <span
-                className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[0.68rem] font-semibold tabular-nums ${
-                  leader ? "bg-[var(--ink)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"
-                }`}
-              >
-                {rank + 1}
-              </span>
-              <span className={`min-w-0 flex-1 truncate text-sm ${leader ? "font-semibold" : "font-medium"}`}>
-                {article.title}
-              </span>
-              <span className="shrink-0 text-sm font-semibold tabular-nums">{article.earnings}</span>
-            </>
-          );
-          const rowClassName = "flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--surface-muted)]";
-          return (
-            <li key={article.id ?? article.title} className="min-w-0 border-t border-[var(--line)] first:border-t-0">
-              {article.href ? (
-                <Link href={article.href} className={rowClassName}>
-                  {row}
-                </Link>
-              ) : (
-                <div className={rowClassName}>{row}</div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+      <ol className="grid flex-1 content-start gap-0 px-2 pb-2">
+        {ranked.map((article, rank) => (
+          <RankingRow key={article.id ?? article.title} article={article} rank={rank + 1} total={total} compact />
+        ))}
+      </ol>
     </Card>
   );
+}
+
+function RankingRow({
+  article,
+  rank,
+  total,
+  compact = false,
+}: {
+  article: NonNullable<DashboardOverviewProps["topArticles"]>[number];
+  rank: number;
+  total: number;
+  compact?: boolean;
+}) {
+  const percentage = total > 0 && article.value !== undefined ? Math.round((article.value / total) * 100) : null;
+  const content = (
+    <>
+      <span className="w-6 shrink-0 text-center text-[0.66rem] font-semibold tabular-nums text-[var(--muted)]">#{rank}</span>
+      <span className="min-w-0 flex-1 truncate text-sm font-medium group-hover:text-[var(--river-deep)]">{article.title}</span>
+      <span className="shrink-0 text-xs font-semibold tabular-nums">{article.earnings}</span>
+      {percentage !== null && <span className="w-8 shrink-0 text-right text-[0.66rem] tabular-nums text-[var(--muted)]">{percentage}%</span>}
+    </>
+  );
+  const className = `group grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto_2rem] items-center gap-2 rounded-lg px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--river-line)] ${compact ? "py-1.5" : "py-2.5"}`;
+  return (
+    <li className="min-w-0">
+      {article.href ? <Link href={article.href} className={className}>{content}</Link> : <div className={className}>{content}</div>}
+    </li>
+  );
+}
+
+function EarningsBreakdown({ breakdown }: { breakdown: NonNullable<DashboardOverviewProps["breakdown"]> }) {
+  return (
+    <Card className="h-full overflow-hidden">
+      <div className="flex items-end justify-between gap-3 px-4 pb-1 pt-3.5">
+        <div>
+          <h2 className="text-sm font-medium">Earnings breakdown</h2>
+          <div className="mt-0.5 text-[0.66rem] text-[var(--quiet)]">Settled earnings by article</div>
+        </div>
+        <div className="text-sm font-semibold tabular-nums">{breakdown.totalEarned}</div>
+      </div>
+      <div className="p-4">
+        <Donut slices={breakdown.slices} centerValue={breakdown.totalEarned} centerLabel="Total earned" size={132} stroke={12} />
+      </div>
+    </Card>
+  );
+}
+
+const HEATMAP_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HEATMAP_LEVELS = [
+  "var(--surface-muted)",
+  "rgba(0, 0, 0, 0.18)",
+  "rgba(0, 0, 0, 0.34)",
+  "rgba(0, 0, 0, 0.55)",
+  "rgba(0, 0, 0, 0.78)",
+  "var(--ink)",
+];
+
+function AgentActivityHeatmap({
+  cells,
+  totalReads,
+  windowDays,
+}: NonNullable<DashboardOverviewProps["activityHeatmap"]>) {
+  const readsBySlot = new Map(cells.map((cell) => [`${cell.day}:${cell.hour}`, cell.reads]));
+  const maxReads = Math.max(...cells.map((cell) => cell.reads), 0);
+  const levelFor = (reads: number) => reads <= 0 || maxReads <= 0
+    ? 0
+    : Math.max(1, Math.ceil((reads / maxReads) * (HEATMAP_LEVELS.length - 1)));
+
+  const content = (
+    <>
+      <div className="flex flex-col gap-1 px-4 pb-3 pt-3.5 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-sm font-medium">Agent active times</h2>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">Settled reads during the last {windowDays} days</p>
+        </div>
+        <div className="text-xs tabular-nums text-[var(--muted)]">{totalReads.toLocaleString()} reads</div>
+      </div>
+      <div className="overflow-x-auto px-4 pb-4 sm:px-5 sm:pb-5">
+        <div className="min-w-[42rem]">
+          <div className="grid grid-cols-[2.75rem_repeat(7,minmax(0,1fr))] gap-[3px]" role="img" aria-label={`Agent activity by weekday and hour over the last ${windowDays} days`}>
+            <span aria-hidden="true" />
+            {HEATMAP_DAY_LABELS.map((label) => (
+              <span key={label} className="pb-1 text-center text-[0.66rem] text-[var(--muted)]">{label}</span>
+            ))}
+            {Array.from({ length: 24 }).map((_, hour) => (
+              <Fragment key={hour}>
+                <span className="flex h-3.5 items-center pr-1 text-right text-[0.62rem] tabular-nums text-[var(--quiet)]">
+                  {hour % 4 === 0 ? `${hour === 0 ? 12 : hour > 12 ? hour - 12 : hour}${hour < 12 ? "am" : "pm"}` : ""}
+                </span>
+                {HEATMAP_DAY_LABELS.map((dayLabel, day) => {
+                  const reads = readsBySlot.get(`${day}:${hour}`) ?? 0;
+                  return (
+                    <span
+                      key={`${day}:${hour}`}
+                      className="h-3.5 rounded-[2px] border border-white/70"
+                      style={{ background: HEATMAP_LEVELS[levelFor(reads)] }}
+                      title={`${dayLabel}, ${hour.toString().padStart(2, "0")}:00 · ${reads} settled ${reads === 1 ? "read" : "reads"}`}
+                      aria-label={`${dayLabel} at ${hour}:00: ${reads} settled reads`}
+                    />
+                  );
+                })}
+              </Fragment>
+            ))}
+          </div>
+          <div className="mt-3 flex items-center justify-end gap-2 text-[0.66rem] text-[var(--muted)]">
+            <span>Less active</span>
+            <span className="flex gap-0.5" aria-hidden="true">
+              {HEATMAP_LEVELS.map((color) => <span key={color} className="h-2.5 w-7 rounded-[2px]" style={{ background: color }} />)}
+            </span>
+            <span>More active</span>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  return <Card className="overflow-hidden">{content}</Card>;
 }
 
 function MoneyActivityChart({ bars }: { bars: TrendBar[] }) {
   const total = bars.reduce((sum, bar) => sum + bar.value, 0);
   const paidDays = bars.filter((bar) => bar.value > 0).length;
   return (
-    <Card className="flex h-full min-h-[13rem] flex-col p-3.5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold">Earnings activity</h2>
-          <p className="text-xs text-[var(--muted)]">Daily earnings from agent reads</p>
+    <Card className="flex h-full min-h-[17.5rem] flex-col overflow-hidden">
+      <div className="flex flex-col gap-3 px-4 pb-1 pt-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-medium text-balance" style={{ color: "var(--muted)" }}>Earnings activity</h2>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">Last {bars.length} days · settled agent reads</p>
         </div>
         <div className="text-right">
           <div className="text-sm font-semibold tabular-nums">{formatUsdDisplay(total)}</div>
           <div className="text-[0.68rem] text-[var(--muted)]">{paidDays} paid days</div>
         </div>
       </div>
-      <div className="mt-3 min-h-0 flex-1">
-        <TrendChart bars={bars} formatValue={formatUsdDisplay} height={132} />
+      <div className="min-h-0 flex-1 px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
+        <TrendChart bars={bars} formatValue={formatUsdDisplay} height={205} />
       </div>
     </Card>
   );
@@ -421,10 +523,10 @@ export function ContentProtectionPolicy() {
 
 function PaymentActivityRows({ rows }: { rows: DashboardOverviewPaymentRow[] }) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader
         title={
-          <span className="inline-flex items-center gap-2">
+          <span className="inline-flex items-center gap-2 text-sm font-medium">
             Recent payment activity
             {rows.length > 0 && <LiveDot />}
           </span>
@@ -465,9 +567,9 @@ function PaymentActivityRows({ rows }: { rows: DashboardOverviewPaymentRow[] }) 
 
 function ArticleRows({ rows }: { rows: DashboardOverviewArticleRow[] }) {
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader
-        title="Your articles"
+        title={<span className="text-sm font-medium">Your articles</span>}
         action={
           <Link href="/dashboard/articles" className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">
             Manage
@@ -524,7 +626,7 @@ function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
   return (
     <Card>
       <CardHeader
-        title="Payout connection"
+        title={<span className="text-sm font-medium">Payout connection</span>}
         action={
           wallet.address ? (
             <div className="flex items-center gap-4">
@@ -558,7 +660,7 @@ function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
       ) : (
         <div className="grid gap-2.5 p-3">
           <p className="px-2 text-xs text-[var(--muted)]">Withdrawable earnings are sent through your confirmed payout connection.</p>
-          <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-1">
             <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
               <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Wallet address</div>
               <div className="mt-2 flex items-center gap-2">
@@ -580,14 +682,6 @@ function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
                   View on {wallet.explorerLabel ?? "explorer"} <ExternalLink size={11} aria-hidden="true" />
                 </a>
               )}
-            </div>
-
-            <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
-              <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Network</div>
-              <div className="mt-2 flex items-center gap-2 text-sm font-medium">
-                <Link2 size={14} className="text-[var(--muted)]" aria-hidden="true" /> {wallet.networkName ?? "Not connected"}
-              </div>
-              {wallet.chainId && <div className="mt-2 text-xs text-[var(--muted)]">Chain ID {wallet.chainId}</div>}
             </div>
 
             <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
@@ -739,7 +833,7 @@ function ExportButton({
             transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
           >
             <AnimatePresence>{copyStatus === "copied" && <CopyCelebration key={celebrationKey} />}</AnimatePresence>
-            <div className="flex items-center justify-between border-b border-[var(--faint)] px-5 py-4">
+            <div className="flex items-center justify-between px-5 pb-3 pt-4">
               <div>
                 <h2 className="text-base font-semibold">Export card</h2>
                 <p className="text-xs text-[var(--muted)]">X-ready PNG · 1080 × 1350</p>
@@ -755,7 +849,7 @@ function ExportButton({
             </div>
 
             {allBackgrounds.length > 0 && (
-              <div className="border-b border-[var(--faint)] px-5 py-3">
+              <div className="mx-5 rounded-xl bg-[var(--surface-muted)] px-3 py-3">
                 <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.6px] text-[var(--muted)]">Background</p>
                 <div className="flex flex-wrap gap-2">
                   {allBackgrounds.map((bg) => (
@@ -1256,20 +1350,19 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
 }
 
 function DeltaHint({ pct, onDark = false }: { pct: number | null; onDark?: boolean }) {
+  const muted = onDark ? "text-white/55" : "text-[var(--muted)]";
   if (pct === null) return null;
-  if (Math.abs(pct) < 1) {
-    return <span className="inline-flex rounded-full bg-[var(--surface-muted)] px-2.5 py-1 font-medium text-[var(--muted)]">Flat vs last week</span>;
-  }
+  if (Math.abs(pct) < 1) return <span className={muted}>Flat vs last week</span>;
   const up = pct > 0;
   const color = up
     ? onDark
-      ? "bg-white/10 text-[var(--gain-on-dark)]"
-      : "bg-[#e8f6ef] text-[var(--gain)]"
+      ? "text-[var(--gain-on-dark)]"
+      : "text-[var(--gain)]"
     : onDark
-      ? "bg-white/10 text-[var(--loss-on-dark)]"
-      : "bg-[#fde8e6] text-[var(--loss)]";
+      ? "text-[var(--loss-on-dark)]"
+      : "text-[var(--loss)]";
   return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 font-medium ${color}`}>
+    <span className={`font-medium tabular-nums ${color}`}>
       {up ? "+" : "−"}
       {Math.abs(Math.round(pct))}% vs last week
     </span>

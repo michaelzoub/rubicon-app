@@ -92,7 +92,8 @@ See `.env.example` for the full list. The core ones:
 
 - `NEXT_PUBLIC_PRIVY_APP_ID` / `NEXT_PUBLIC_PRIVY_CLIENT_ID` / `PRIVY_APP_SECRET` / `SUPABASE_JWT_SECRET` — creator authentication.
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` — Supabase database.
-- `NEXT_PUBLIC_RUBICON_API_BASE` — Rubicon gateway/API.
+- `RUBICON_GATEWAY_URL` — Rubicon gateway URL used by server-rendered dashboard docs and gateway integrations.
+- `RUBICON_API_URL` / `NEXT_PUBLIC_RUBICON_API_URL` — gateway URL aliases used by local/server and browser-facing integrations.
 - `X_COOKIE` / `X_AUTH_BEARER` — optional, for broader X (Twitter) import support. Exact `@handle` lookup works without them; name search and profile-wide Article listing are login-gated by X.
 
 ## Verification
