@@ -26,6 +26,7 @@ import {
 } from "../../_components/ui";
 import { AgentPreviewDialog } from "../_components/agent-preview-dialog";
 import { MarkdownEditor } from "../../_components/markdown-editor";
+import { DashboardDialog } from "../../_components/overlays";
 
 export default function ArticleDetailPage() {
   const params = useParams<{ articleId: string }>();
@@ -168,14 +169,14 @@ export default function ArticleDetailPage() {
           )}
 
           {deleteOpen && (
-            <div
-              className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="delete-article-title"
-              onClick={() => !remove.pending && setDeleteOpen(false)}
+            <DashboardDialog
+              open={deleteOpen}
+              onClose={() => setDeleteOpen(false)}
+              labelledBy="delete-article-title"
+              className="max-w-md p-6"
+              closeDisabled={remove.pending}
+              dismissOnBackdrop={!remove.pending}
             >
-              <div className="w-full max-w-md rounded-lg border border-[var(--line)] bg-white p-6" onClick={(event) => event.stopPropagation()}>
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <h2 id="delete-article-title" className="text-lg font-semibold">Delete this article?</h2>
@@ -215,8 +216,7 @@ export default function ArticleDetailPage() {
                   </button>
                 </div>
                 {remove.error && <p className="mt-3 text-sm text-[#8d2f2d]" role="alert">{remove.error.message}</p>}
-              </div>
-            </div>
+            </DashboardDialog>
           )}
 
           {editing && (

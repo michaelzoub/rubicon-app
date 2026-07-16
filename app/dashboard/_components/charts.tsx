@@ -10,45 +10,27 @@
  * final state immediately instead of animating.
  */
 
-import { animate, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { DonutSlice } from "./chart-data";
+
+export { buildEarningsDonutSlices, DONUT_COLORS, type DonutSlice } from "./chart-data";
 
 /* ---------- animated number ---------- */
 
 /**
- * Counts up to `value` whenever it changes. `format` controls how the
- * in-flight number is rendered (e.g. currency, thousands separators).
+ * Stable number formatting for dashboard metrics. Values intentionally do not
+ * re-animate on refresh, avoiding repeated motion and digit churn.
  */
 export function CountUp({
   value,
   format,
-  duration = 0.55,
 }: {
   value: number;
   format: (n: number) => string;
-  duration?: number;
 }) {
-  const reduce = useReducedMotion();
-  const [display, setDisplay] = useState(value);
-  const from = useRef(value);
-
-  useEffect(() => {
-    if (reduce) {
-      setDisplay(value);
-      from.current = value;
-      return;
-    }
-    const controls = animate(from.current, value, {
-      duration,
-      ease: [0.16, 1, 0.3, 1],
-      onUpdate: (v) => setDisplay(v),
-    });
-    from.current = value;
-    return () => controls.stop();
-  }, [value, duration, reduce]);
-
-  return <>{format(display)}</>;
+  return <>{format(value)}</>;
 }
 
 /* ---------- entrance reveal ---------- */
@@ -89,6 +71,48 @@ export interface TrendBar {
   detail?: string;
 }
 
+export function ChartFrame({ children, height, className = "" }: { children: ReactNode; height: number | string; className?: string }) {
+  return <div className={`dashboard-data-viz w-full select-none ${className}`} style={{ height }} data-chart-frame>{children}</div>;
+}
+
+export function ChartTooltip({
+  label,
+  value,
+  detail,
+}: {
+  label: ReactNode;
+  value: ReactNode;
+  detail?: ReactNode;
+}) {
+  return (
+    <div className="min-w-40 rounded-lg border border-[var(--line)] bg-white px-3 py-2.5 text-left">
+      <div className="dashboard-meta">{label}</div>
+      <div className="mt-0.5 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</div>
+      {detail && <div className="dashboard-meta mt-1">{detail}</div>}
+    </div>
+  );
+}
+
+export function ChartEmptyState({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="relative flex h-full min-h-44 items-center justify-center overflow-hidden border-t border-dashed border-[var(--line)] px-5 text-center">
+      <div>
+        <p className="text-sm font-medium text-[var(--ink)]">{title}</p>
+        {description && <p className="dashboard-meta mt-1 max-w-sm text-pretty">{description}</p>}
+      </div>
+    </div>
+  );
+}
+
+export function ChartLoadingState({ label = "Loading chart" }: { label?: string }) {
+  return (
+    <div className="grid h-full min-h-44 content-end gap-4 border-t border-[var(--line)] p-4" role="status" aria-label={label}>
+      <span className="sr-only">{label}</span>
+      {[72, 46, 63, 38].map((width) => <span key={width} className="rubicon-skeleton h-px" style={{ width: `${width}%` }} />)}
+    </div>
+  );
+}
+
 /**
  * Compact analytics line chart with restrained axes and a detailed hover state.
  * The values remain the real daily series; the chart only adds enough structure
@@ -101,14 +125,15 @@ export function TrendChart({
 }: {
   bars: TrendBar[];
   formatValue: (n: number) => string;
-  height?: number;
+  height?: number | string;
 }) {
   const reduce = useReducedMotion();
+  const animateOnFirstData = useFirstDataAnimation(bars.length > 0);
   const max = Math.max(...bars.map((b) => b.value), 0);
   const data = bars.map((bar, index) => ({ ...bar, index }));
 
   return (
-    <div className="dashboard-data-viz w-full select-none" style={{ height }}>
+    <ChartFrame height={height}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 4 }} accessibilityLayer>
           <CartesianGrid vertical={false} stroke="var(--line)" strokeDasharray="2 4" />
@@ -135,16 +160,10 @@ export function TrendChart({
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const point = payload[0].payload as TrendBar;
-              return (
-                <div className="min-w-40 rounded-lg border border-[var(--line)] bg-white px-3 py-2.5">
-                  <div className="text-[0.68rem] text-[var(--muted)]">{point.fullLabel}</div>
-                  <div className="mt-0.5 text-sm font-semibold tabular-nums text-[var(--ink)]">{formatValue(point.value)}</div>
-                  {point.detail && <div className="mt-1 text-[0.68rem] text-[var(--muted)]">{point.detail}</div>}
-                </div>
-              );
+              return <ChartTooltip label={point.fullLabel} value={formatValue(point.value)} detail={point.detail} />;
             }}
             isAnimationActive={false}
-            wrapperStyle={{ outline: "none", pointerEvents: "none", zIndex: 50 }}
+            wrapperStyle={{ outline: "none", pointerEvents: "none", zIndex: "var(--dashboard-z-popover)" }}
           />
           <Line
             type="linear"
@@ -153,25 +172,17 @@ export function TrendChart({
             strokeWidth={1.25}
             dot={false}
             activeDot={{ r: 3, fill: "var(--ink)", stroke: "white", strokeWidth: 1.5 }}
-            isAnimationActive={!reduce}
-            animationDuration={420}
+            isAnimationActive={!reduce && animateOnFirstData}
+            animationDuration={240}
+            animationEasing="ease-out"
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </ChartFrame>
   );
 }
 
 /* ---------- donut ---------- */
-
-export interface DonutSlice {
-  label: string;
-  value: number;
-  color: string;
-}
-
-/** Monochrome ink ramp, deep → pale: rank reads by lightness, the legend carries identity. */
-export const DONUT_COLORS = ["#18181b", "#47474d", "#75757c", "#a3a3ab", "#d2d2d7"];
 
 /**
  * Ring chart with a centered headline. Slices sweep in clockwise on mount and
@@ -195,15 +206,17 @@ export function Donut({
   const reduce = useReducedMotion();
   const [active, setActive] = useState<number | null>(null);
   const total = slices.reduce((sum, s) => sum + s.value, 0);
-  const radius = (size - stroke) / 2;
+  const activeStroke = stroke + 2;
+  const safetyInset = 2;
+  const radius = (size - activeStroke - safetyInset * 2) / 2;
   const circumference = 2 * Math.PI * radius;
 
   let offsetAcc = 0;
 
   return (
-    <div className="grid w-full min-w-0 grid-cols-1 items-center gap-5 sm:grid-cols-[auto_minmax(0,1fr)] sm:gap-5">
-      <div className="relative shrink-0" style={{ width: size, height: size }}>
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+    <div className="grid w-full min-w-0 grid-cols-1 items-center justify-items-center gap-4 sm:grid-cols-[9rem_minmax(0,1fr)] sm:justify-items-stretch sm:gap-5" data-donut>
+      <div className="relative shrink-0 overflow-hidden" style={{ width: size, height: size }} data-donut-chart>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" role="img" aria-label={`${centerLabel}: ${centerValue}`}>
           {/* track */}
           <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--surface-muted)" strokeWidth={stroke} />
           {total > 0 &&
@@ -225,16 +238,23 @@ export function Donut({
                   r={radius}
                   fill="none"
                   stroke={slice.color}
-                  strokeWidth={isActive ? stroke + 4 : stroke}
+                  strokeWidth={isActive ? activeStroke : stroke}
                   strokeLinecap="butt"
                   strokeDasharray={`${dash} ${gap}`}
                   strokeDashoffset={dashOffset}
                   initial={reduce ? false : { strokeDasharray: `0 ${circumference}` }}
                   animate={{ strokeDasharray: `${dash} ${gap}`, opacity: dim ? 0.35 : 1 }}
-                  transition={{ duration: 0.46, delay: reduce ? 0 : 0.05 + i * 0.045, ease: [0.23, 1, 0.32, 1] }}
+                  transition={{ duration: reduce ? 0 : 0.18, delay: reduce ? 0 : i * 0.025, ease: [0.23, 1, 0.32, 1] }}
                   onMouseEnter={() => setActive(i)}
                   onMouseLeave={() => setActive((cur) => (cur === i ? null : cur))}
-                  style={{ cursor: "pointer", transition: "stroke-width 180ms ease" }}
+                  onPointerMove={() => setActive(i)}
+                  onFocus={() => setActive(i)}
+                  onBlur={() => setActive((cur) => (cur === i ? null : cur))}
+                  tabIndex={0}
+                  aria-label={`${slice.label}: ${((slice.value / total) * 100).toFixed(1)}%`}
+                  data-donut-segment
+                  data-active={isActive ? "true" : "false"}
+                  style={{ cursor: "pointer", transition: reduce ? "none" : "stroke-width var(--dashboard-motion-fast) var(--dashboard-ease-out)" }}
                 />
               );
             })}
@@ -248,19 +268,29 @@ export function Donut({
       </div>
 
       {/* legend */}
-      <ul className="w-full min-w-0 space-y-2.5 overflow-hidden">
+      <ul className="w-full min-w-0 space-y-1 overflow-hidden" aria-label={`${centerLabel} breakdown`}>
         {slices.map((slice, i) => {
-          const pct = total > 0 ? Math.round((slice.value / total) * 100) : 0;
+          const pct = total > 0 ? (slice.value / total) * 100 : 0;
+          const fullLabel = slice.groupedLabels?.length
+            ? `${slice.label}: ${slice.groupedLabels.join(", ")}`
+            : slice.label;
           return (
             <li
               key={i}
-              className={`flex items-center gap-2.5 rounded-md px-2 py-1 transition-colors ${active === i ? "bg-[var(--surface-muted)]" : ""}`}
+              className={`flex min-h-8 items-center gap-2.5 rounded-[5px] px-2 py-1 transition-[background-color,color,opacity] duration-150 motion-reduce:transition-none ${active === i ? "bg-black/[0.035]" : ""}`}
               onMouseEnter={() => setActive(i)}
               onMouseLeave={() => setActive((cur) => (cur === i ? null : cur))}
+              onPointerMove={() => setActive(i)}
+              onFocus={() => setActive(i)}
+              onBlur={() => setActive((cur) => (cur === i ? null : cur))}
+              tabIndex={0}
+              data-donut-legend-row
+              data-active={active === i ? "true" : "false"}
+              title={fullLabel}
             >
               <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: slice.color }} />
               <span className="min-w-0 flex-1 truncate text-sm text-[var(--ink)]">{slice.label}</span>
-              <span className="mono shrink-0 text-xs font-medium text-[var(--muted)]">{pct}%</span>
+              <span className="mono w-12 shrink-0 text-right text-xs font-medium tabular-nums text-[var(--muted)]">{pct.toFixed(1)}%</span>
             </li>
           );
         })}
@@ -295,6 +325,7 @@ export function Sparkline({
   strokeWidth?: number;
 }) {
   const reduce = useReducedMotion();
+  const animateOnFirstData = useFirstDataAnimation(values.length > 1);
   if (values.length < 2) return null;
 
   const data = values.map((value, index) => ({
@@ -314,22 +345,10 @@ export function Sparkline({
               if (!active || !payload?.length) return null;
               const value = Number(payload[0].value ?? 0);
               const point = payload[0].payload as { label?: string; detail?: string } | undefined;
-              return (
-                <div className="min-w-44 rounded-lg border border-[var(--line)] bg-white px-3 py-2.5">
-                  <div className="flex items-baseline justify-between gap-4">
-                    <span className="text-[0.68rem] text-[var(--muted)]">Date</span>
-                    <span className="text-xs font-medium text-[var(--ink)]">{point?.label ?? "Unknown date"}</span>
-                  </div>
-                  <div className="mt-1.5 flex items-baseline justify-between gap-4 border-t border-[var(--line)] pt-1.5">
-                    <span className="text-[0.68rem] text-[var(--muted)]">{metricLabel}</span>
-                    <span className="text-xs font-semibold tabular-nums text-[var(--ink)]">{formatValue(value)}</span>
-                  </div>
-                  {point?.detail && <div className="mt-1.5 border-t border-[var(--line)] pt-1.5 text-right text-[0.68rem] text-[var(--muted)]">{point.detail}</div>}
-                </div>
-              );
+              return <ChartTooltip label={point?.label ?? "Unknown date"} value={`${metricLabel}: ${formatValue(value)}`} detail={point?.detail} />;
             }}
             isAnimationActive={false}
-            wrapperStyle={{ outline: "none", pointerEvents: "none", zIndex: 50 }}
+            wrapperStyle={{ outline: "none", pointerEvents: "none", zIndex: "var(--dashboard-z-popover)" }}
           />
           <Line
             type="monotone"
@@ -338,13 +357,23 @@ export function Sparkline({
             strokeWidth={strokeWidth}
             dot={false}
             activeDot={{ r: 3, fill: color, stroke: "white", strokeWidth: 1.5 }}
-            isAnimationActive={!reduce}
-            animationDuration={500}
+            isAnimationActive={!reduce && animateOnFirstData}
+            animationDuration={220}
+            animationEasing="ease-out"
           />
         </LineChart>
       </ResponsiveContainer>
     </div>
   );
+}
+
+function useFirstDataAnimation(hasData: boolean) {
+  const hasAnimated = useRef(false);
+  const shouldAnimate = hasData && !hasAnimated.current;
+  useEffect(() => {
+    if (hasData) hasAnimated.current = true;
+  }, [hasData]);
+  return shouldAnimate;
 }
 
 /* ---------- big-number insight tile ---------- */

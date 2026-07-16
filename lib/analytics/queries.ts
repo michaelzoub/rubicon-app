@@ -20,19 +20,36 @@ export interface ClickHouseQueries {
  */
 export function clickHouseQueries(database: string): ClickHouseQueries {
   const table = (name: string) => `\`${database}\`.\`${name}\``;
-  const dateFilter = "day >= {fromDate:Date} AND day <= {toDate:Date}";
   const eventDateFilter = "occurred_at >= toDateTime64({fromTimestamp:String}, 3, 'UTC') AND occurred_at < toDateTime64({toExclusiveTimestamp:String}, 3, 'UTC')";
+  const settlementByBundle = `
+      WITH settlement_by_bundle AS (
+        SELECT bundle_id, argMax(settlement_status, occurred_at) AS settlement_status
+        FROM (
+          SELECT arrayJoin(bundle_ids) AS bundle_id, settlement_status, occurred_at
+          FROM ${table("analytics_events")} FINAL
+          WHERE event_version = 1
+            AND event_type = 'settlement_changed'
+            AND creator_id = {creatorId:String}
+        )
+        GROUP BY bundle_id
+      )`;
+  const settled = "settlement.settlement_status IN ('confirmed', 'completed')";
 
   return {
     totals: `
+      ${settlementByBundle}
       SELECT
-        toString(sum(delivered_words)) AS words_read,
-        toString(sum(paid_words)) AS paid_words,
-        toString(sum(gross_amount_atomic)) AS gross_amount_atomic,
-        toString(sum(creator_earnings_atomic)) AS creator_amount_atomic,
-        toString(sum(settled_creator_earnings_atomic)) AS settled_creator_amount_atomic
-      FROM ${table("creator_daily_metrics")}
-      WHERE creator_id = {creatorId:String} AND ${dateFilter}`,
+        toString(sum(reads.words_count)) AS words_read,
+        toString(sumIf(reads.words_count, reads.access_mode = 'paid')) AS paid_words,
+        toString(sum(reads.gross_amount_atomic)) AS gross_amount_atomic,
+        toString(sum(reads.creator_amount_atomic)) AS creator_amount_atomic,
+        toString(sumIf(reads.creator_amount_atomic, ${settled})) AS settled_creator_amount_atomic
+      FROM ${table("analytics_events")} AS reads FINAL
+      LEFT JOIN settlement_by_bundle AS settlement USING (bundle_id)
+      WHERE reads.event_version = 1
+        AND reads.event_type = 'read_bundle_committed'
+        AND reads.creator_id = {creatorId:String}
+        AND ${eventDateFilter}`,
 
     distinctTotals: `
       SELECT
@@ -45,59 +62,79 @@ export function clickHouseQueries(database: string): ClickHouseQueries {
         AND ${eventDateFilter}`,
 
     daily: `
+      ${settlementByBundle}
       SELECT
-        toString(day) AS date,
-        toString(delivered_words) AS words_read,
-        toString(paid_words) AS paid_words,
-        toString(agent_reads) AS agent_reads,
-        toString(unique_agents) AS unique_agents,
-        toString(gross_amount_atomic) AS gross_amount_atomic,
-        toString(creator_earnings_atomic) AS creator_amount_atomic,
-        toString(settled_creator_earnings_atomic) AS settled_creator_amount_atomic
-      FROM ${table("creator_daily_metrics")}
-      WHERE creator_id = {creatorId:String} AND ${dateFilter}
-      ORDER BY day ASC
+        toString(toDate(reads.occurred_at, 'UTC')) AS date,
+        toString(sum(reads.words_count)) AS words_read,
+        toString(sumIf(reads.words_count, reads.access_mode = 'paid')) AS paid_words,
+        toString(uniqExact(reads.session_id)) AS agent_reads,
+        toString(uniqExactIf(reads.buyer_agent_hash, reads.buyer_agent_hash != '')) AS unique_agents,
+        toString(sum(reads.gross_amount_atomic)) AS gross_amount_atomic,
+        toString(sum(reads.creator_amount_atomic)) AS creator_amount_atomic,
+        toString(sumIf(reads.creator_amount_atomic, ${settled})) AS settled_creator_amount_atomic
+      FROM ${table("analytics_events")} AS reads FINAL
+      LEFT JOIN settlement_by_bundle AS settlement USING (bundle_id)
+      WHERE reads.event_version = 1
+        AND reads.event_type = 'read_bundle_committed'
+        AND reads.creator_id = {creatorId:String}
+        AND ${eventDateFilter}
+      GROUP BY date
+      ORDER BY date ASC
       LIMIT {dailyLimit:UInt32}`,
 
     topArticles: `
+      ${settlementByBundle}
       SELECT
-        article_id,
-        toString(sum(delivered_words)) AS words_read,
-        toString(sum(paid_words)) AS paid_words,
-        toString(sum(creator_earnings_atomic)) AS creator_amount_atomic,
-        toString(sum(settled_creator_earnings_atomic)) AS settled_creator_amount_atomic
-      FROM ${table("article_daily_metrics")}
-      WHERE creator_id = {creatorId:String} AND ${dateFilter}
-      GROUP BY article_id
-      ORDER BY sum(settled_creator_earnings_atomic) DESC, article_id ASC
+        reads.article_id,
+        toString(sum(reads.words_count)) AS words_read,
+        toString(sumIf(reads.words_count, reads.access_mode = 'paid')) AS paid_words,
+        toString(sum(reads.creator_amount_atomic)) AS creator_amount_atomic,
+        toString(sumIf(reads.creator_amount_atomic, ${settled})) AS settled_creator_amount_atomic
+      FROM ${table("analytics_events")} AS reads FINAL
+      LEFT JOIN settlement_by_bundle AS settlement USING (bundle_id)
+      WHERE reads.event_version = 1
+        AND reads.event_type = 'read_bundle_committed'
+        AND reads.creator_id = {creatorId:String}
+        AND ${eventDateFilter}
+      GROUP BY reads.article_id
+      ORDER BY sumIf(reads.creator_amount_atomic, ${settled}) DESC, reads.article_id ASC
       LIMIT {topArticleLimit:UInt32}`,
 
     articleTotals: `
+      ${settlementByBundle}
       SELECT
-        toString(sum(delivered_words)) AS words_read,
-        toString(sum(paid_words)) AS paid_words,
-        toString(sum(creator_earnings_atomic)) AS creator_amount_atomic,
-        toString(sum(settled_creator_earnings_atomic)) AS settled_creator_amount_atomic
-      FROM ${table("article_daily_metrics")}
-      WHERE creator_id = {creatorId:String}
-        AND article_id = {articleId:String}
-        AND ${dateFilter}`,
+        toString(sum(reads.words_count)) AS words_read,
+        toString(sumIf(reads.words_count, reads.access_mode = 'paid')) AS paid_words,
+        toString(sum(reads.creator_amount_atomic)) AS creator_amount_atomic,
+        toString(sumIf(reads.creator_amount_atomic, ${settled})) AS settled_creator_amount_atomic
+      FROM ${table("analytics_events")} AS reads FINAL
+      LEFT JOIN settlement_by_bundle AS settlement USING (bundle_id)
+      WHERE reads.event_version = 1
+        AND reads.event_type = 'read_bundle_committed'
+        AND reads.creator_id = {creatorId:String}
+        AND reads.article_id = {articleId:String}
+        AND ${eventDateFilter}`,
 
     articleDaily: `
+      ${settlementByBundle}
       SELECT
-        toString(day) AS date,
-        toString(delivered_words) AS words_read,
-        toString(paid_words) AS paid_words,
-        toString(agent_reads) AS agent_reads,
-        toString(unique_agents) AS unique_agents,
-        toString(gross_amount_atomic) AS gross_amount_atomic,
-        toString(creator_earnings_atomic) AS creator_amount_atomic,
-        toString(settled_creator_earnings_atomic) AS settled_creator_amount_atomic
-      FROM ${table("article_daily_metrics")}
-      WHERE creator_id = {creatorId:String}
-        AND article_id = {articleId:String}
-        AND ${dateFilter}
-      ORDER BY day ASC
+        toString(toDate(reads.occurred_at, 'UTC')) AS date,
+        toString(sum(reads.words_count)) AS words_read,
+        toString(sumIf(reads.words_count, reads.access_mode = 'paid')) AS paid_words,
+        toString(uniqExact(reads.session_id)) AS agent_reads,
+        toString(uniqExactIf(reads.buyer_agent_hash, reads.buyer_agent_hash != '')) AS unique_agents,
+        toString(sum(reads.gross_amount_atomic)) AS gross_amount_atomic,
+        toString(sum(reads.creator_amount_atomic)) AS creator_amount_atomic,
+        toString(sumIf(reads.creator_amount_atomic, ${settled})) AS settled_creator_amount_atomic
+      FROM ${table("analytics_events")} AS reads FINAL
+      LEFT JOIN settlement_by_bundle AS settlement USING (bundle_id)
+      WHERE reads.event_version = 1
+        AND reads.event_type = 'read_bundle_committed'
+        AND reads.creator_id = {creatorId:String}
+        AND reads.article_id = {articleId:String}
+        AND ${eventDateFilter}
+      GROUP BY date
+      ORDER BY date ASC
       LIMIT {dailyLimit:UInt32}`,
 
     articleDistinct: `

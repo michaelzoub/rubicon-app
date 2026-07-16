@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Inbox, Loader2, LogIn, RefreshCw } from "lucide-react";
+import { AlertTriangle, Inbox, Loader2, LogIn, Minus, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { RubiconError } from "@/lib/rubicon/client";
 import type { ArticleState } from "@/lib/rubicon/types";
@@ -51,9 +51,45 @@ export function Card({
 export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3.5">
-      <h2 className="text-sm font-medium text-[var(--muted)]">{title}</h2>
+      <h2 className="dashboard-panel-title">{title}</h2>
       {action}
     </div>
+  );
+}
+
+export const DashboardPanel = Card;
+export const PanelHeader = CardHeader;
+
+export function MetricTrend({
+  value,
+  label = "vs last week",
+  onDark = false,
+  compact = true,
+}: {
+  value: number | null;
+  label?: string;
+  onDark?: boolean;
+  compact?: boolean;
+}) {
+  const neutral = value === null || Math.abs(value) < 1;
+  const positive = value !== null && value >= 1;
+  const Icon = neutral ? Minus : positive ? TrendingUp : TrendingDown;
+  const tone = onDark
+    ? neutral ? "text-white/55" : positive ? "text-[var(--gain-on-dark)]" : "text-[var(--loss-on-dark)]"
+    : neutral
+      ? "text-[#85858d]"
+      : positive
+        ? "text-[#74a888]"
+        : "text-[#c98a83]";
+  const valueLabel = neutral || value === null ? "Flat" : `${value > 0 ? "+" : "−"}${Math.abs(Math.round(value))}%`;
+
+  return (
+    <span className={`inline-flex shrink-0 items-center justify-end gap-1 font-medium tabular-nums ${compact ? "text-[0.7rem]" : "text-xs"} ${tone}`}>
+      <span>{valueLabel}</span>
+      <Icon size={compact ? 13 : 14} strokeWidth={1.8} aria-hidden="true" />
+      {!compact && <span className="font-normal">{label}</span>}
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }
 

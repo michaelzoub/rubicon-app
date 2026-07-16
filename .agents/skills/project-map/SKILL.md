@@ -9,6 +9,7 @@ description: Concise orientation map for important Rubicon app routes, architect
 
 - `app/page.tsx`: public landing page.
 - `app/dashboard/layout.tsx` and `app/dashboard/_components/shell.tsx`: authenticated creator dashboard shell.
+- `app/dashboard/_components/overlays.tsx` and `app/dashboard/dashboard.css`: shared dashboard portal, dialog stack/focus/scroll behavior, motion tokens, typography tokens, and documented z-index scale. See `UI_CONVENTIONS.md`.
 - `app/dashboard/_components/substack-onboarding-dialog.tsx`: first-run platform selection plus Substack and Artemis onboarding/pricing flows; renders through a body portal and owns document scroll while open.
 - `app/dashboard/articles/new/page.tsx`: new article and URL-import review/publish flow.
 - `app/dashboard/imports/[draftId]/page.tsx`: extension-import draft review.
@@ -25,7 +26,7 @@ description: Concise orientation map for important Rubicon app routes, architect
 
 ## Data and payments
 
-- `app/api/analytics/overview/`, `app/api/analytics/articles/[articleId]/`, and `lib/analytics/`: Privy-authenticated, creator-scoped analytics boundary. Production reads the backend-owned ClickHouse v1 aggregate model plus creator-scoped read events over server-side native HTTP; a server-side `read_bundles` Postgres repository is the controlled fallback. Supabase hydrates current article/section metadata, while backfilled evidence without a local article row remains visible as archived. Atomic money remains strings, and browser dashboard code never reads raw ledgers or credentials. See `docs/dashboard-analytics.md`.
+- `app/api/analytics/overview/`, `app/api/analytics/articles/[articleId]/`, and `lib/analytics/`: Privy-authenticated, creator-scoped analytics boundary. Production uses backend-owned ClickHouse v1 events over server-side native HTTP; totals, earnings activity, and article rankings resolve each read against its latest settlement status so migrated zero-delta records remain accurate. The overview accepts `allTime=1` for the dashboard’s historical earnings breakdown, while its default response remains a 30-day operational view. A server-side `read_bundles` Postgres repository is the controlled fallback. Supabase hydrates current article/section metadata, while backfilled evidence without a local article row remains visible as archived. Atomic money remains strings, and browser dashboard code never reads raw ledgers or credentials. See `docs/dashboard-analytics.md`.
 - `lib/rubicon/client.ts` and `types.ts`: dashboard/Supabase contract, including creator-owned wallet records keyed by network for Arc and verified AgentCash Base (`eip155:8453`) recipients.
 - `app/api/agentcash/wallet/route.ts`: development-only endpoint that verifies the requested EVM address is linked to the authenticated Privy creator before storing it as that creator's verified Base wallet; private keys never reach Rubicon.
 - `lib/gateway.ts`, `gateway-client.ts`, `chain.ts`, and `onchain.ts`: metered access and payment integration.

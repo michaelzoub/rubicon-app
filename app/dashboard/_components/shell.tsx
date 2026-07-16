@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import {
+  ArrowLeft,
   BookOpen,
   FileText,
   LayoutDashboard,
@@ -108,10 +109,10 @@ export function WriterAuthScreen({ onLogin, demo = false }: { onLogin: () => voi
         <section className="writer-auth-panel" aria-label="Sign in">
           <button
             type="button"
-            className="writer-auth-back"
+            className="writer-auth-back inline-flex items-center gap-1.5"
             onClick={handleBackToRubicon}
           >
-            ← Back to Rubicon
+            <ArrowLeft size={15} strokeWidth={1.8} aria-hidden="true" /> Back to Rubicon
           </button>
           <div className="writer-auth-signin">
             <h2>Start listing on Rubicon</h2>
@@ -339,7 +340,7 @@ function MobileBar({ onLogout, activePath }: { onLogout?: () => void; activePath
           <RubiconBrand className="h-7" onLight src="/w_logo.svg" />
         </a>
         {onLogout && (
-          <button type="button" onClick={onLogout} className="text-[var(--muted)]" aria-label="Sign out">
+          <button type="button" onClick={onLogout} className="dashboard-icon-button text-[var(--muted)]" aria-label="Sign out">
             <LogOut size={18} aria-hidden="true" />
           </button>
         )}
@@ -351,7 +352,7 @@ function MobileBar({ onLogout, activePath }: { onLogout?: () => void; activePath
             <Link
               key={item.href}
               href={item.href}
-              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+              className={`inline-flex min-h-10 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
                 active ? "bg-[var(--surface-muted)] text-[var(--ink)]" : "text-[var(--muted)]"
               }`}
             >

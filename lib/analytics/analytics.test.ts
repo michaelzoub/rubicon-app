@@ -65,6 +65,14 @@ describe("analytics date ranges", () => {
     });
   });
 
+  it("allows the explicit all-time overview range without relaxing ordinary range limits", () => {
+    expect(parseAnalyticsDateRange(new URLSearchParams("allTime=1"), config, new Date("2026-07-15T19:00:00Z"))).toEqual({
+      from: "1970-01-01",
+      to: "2026-07-15",
+      toExclusive: "2026-07-16",
+    });
+  });
+
   it.each([
     "from=nope&to=2026-07-15",
     "from=2026-07-16&to=2026-07-15",
@@ -203,7 +211,9 @@ describe("settlement and freshness semantics", () => {
 describe("query and client boundaries", () => {
   it("uses the backend v1 contract, bundle words, direct creator-scoped reads, and creator parameters", () => {
     const clickhouse = clickHouseQueries("analytics");
-    expect(clickhouse.totals).toContain("creator_daily_metrics");
+    expect(clickhouse.totals).toContain("arrayJoin(bundle_ids)");
+    expect(clickhouse.totals).toContain("FROM `analytics`.`analytics_events` AS reads FINAL");
+    expect(clickhouse.totals).toContain("sumIf(reads.creator_amount_atomic, settlement.settlement_status IN ('confirmed', 'completed'))");
     expect(clickhouse.daily).toContain("{creatorId:String}");
     expect(clickhouse.distinctTotals).toContain("event_version = 1");
     expect(clickhouse.distinctTotals).toContain("read_bundle_committed");
@@ -212,7 +222,7 @@ describe("query and client boundaries", () => {
     expect(clickhouse.recentReads).toContain("reads.event_type = 'read_bundle_committed'");
     expect(clickhouse.recentReads).toContain("reads.occurred_at >= toDateTime64");
     expect(clickhouse.recentReads).not.toContain("FROM `analytics`.`recent_reads`");
-    expect(clickhouse.topArticles).toContain("ORDER BY sum(settled_creator_earnings_atomic) DESC");
+    expect(clickhouse.topArticles).toContain("ORDER BY sumIf(reads.creator_amount_atomic, settlement.settlement_status IN ('confirmed', 'completed')) DESC");
     expect(postgresQueries.totals).toContain("FROM read_bundles");
     expect(postgresQueries.totals).toContain("COUNT(DISTINCT session_id)");
     expect(postgresQueries.totals).toContain("payment_status = 'completed'");

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Eye, Lock, X } from "lucide-react";
 import { atomicForWords, formatUsd } from "@/lib/rubicon/pricing";
 import type { Article } from "@/lib/rubicon/types";
+import { DashboardDialog } from "../../_components/overlays";
 
 export const AGENT_PREVIEW_STORAGE_KEY = "rubicon.agentPreview.seen";
 export const AGENT_PREVIEW_EVENT = "rubicon:agent-preview-seen";
@@ -38,15 +39,6 @@ export function AgentPreviewDialog({
     markAgentPreviewSeen();
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose, open]);
-
   if (!open || !article) return null;
 
   const headings = article.sections
@@ -58,9 +50,7 @@ export function AgentPreviewDialog({
   const estimatedFullPrice = article.maxArticlePriceAtomic ?? atomicForWords(article.pricePerWordAtomic, article.totalWords);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(16,24,40,0.28)] px-4 py-6" role="dialog" aria-modal="true" aria-labelledby="agent-preview-title">
-      <button type="button" className="absolute inset-0 cursor-default" aria-label="Close preview" onClick={onClose} />
-      <div className="relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-[18px] border border-[var(--line)] bg-white">
+    <DashboardDialog open={open} onClose={onClose} labelledBy="agent-preview-title" className="max-w-2xl overflow-hidden">
         <div className="flex items-start justify-between gap-4 border-b border-[var(--line)] p-5">
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[var(--river-pale)] px-3 py-1 text-xs font-semibold text-[var(--river-deep)]">
@@ -69,7 +59,7 @@ export function AgentPreviewDialog({
             <h2 id="agent-preview-title" className="text-xl font-semibold">{article.title}</h2>
             <p className="mt-1 text-sm text-[var(--muted)]">{article.author}</p>
           </div>
-          <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--muted)] hover:bg-[var(--surface-muted)] hover:text-[var(--ink)]" aria-label="Close preview">
+          <button type="button" onClick={onClose} className="dashboard-icon-button shrink-0" aria-label="Close preview">
             <X size={17} aria-hidden="true" />
           </button>
         </div>
@@ -118,8 +108,7 @@ export function AgentPreviewDialog({
             </div>
           </section>
         </div>
-      </div>
-    </div>
+    </DashboardDialog>
   );
 }
 

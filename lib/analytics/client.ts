@@ -6,6 +6,7 @@ import type { AnalyticsOverviewResponse, ArticleAnalyticsResponse } from "./type
 export interface AnalyticsClientDateRange {
   from?: string;
   to?: string;
+  allTime?: boolean;
 }
 
 export async function fetchAnalyticsOverview(
@@ -33,6 +34,7 @@ async function authenticatedAnalyticsFetch<T>(
   const search = new URLSearchParams();
   if (range.from) search.set("from", range.from);
   if (range.to) search.set("to", range.to);
+  if (range.allTime) search.set("allTime", "1");
 
   let response: Response;
   try {

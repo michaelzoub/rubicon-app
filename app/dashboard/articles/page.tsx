@@ -10,6 +10,7 @@ import { formatUsd } from "@/lib/rubicon/pricing";
 import { isStolenXContent } from "@/lib/articles/ownership";
 import {
   ArticleStatePill,
+  Card,
   EmptyState,
   ErrorState,
   formatRelative,
@@ -55,7 +56,6 @@ export default function ArticlesPage() {
     <div className="grid gap-6">
       <PageHeader
         title="Your articles"
-        description="Everything you’ve published for agents to read."
         action={
           <div className="grid justify-items-start gap-1.5 sm:justify-items-end">
             <div className="flex flex-wrap items-center gap-2">
@@ -99,14 +99,15 @@ export default function ArticlesPage() {
       )}
 
       {articles.status === "success" && (articles.data?.length ?? 0) > 0 && (
-        <ul className="grid min-w-0 gap-2 p-2">
+        <Card className="overflow-hidden">
+        <ul className="divide-y divide-[var(--line)]">
           {articles.data!.map((article) => {
             const stolen = isStolen(article);
             const metric = analytics.data?.topArticles.find((candidate) => candidate.articleId === article.id);
             return (
             <li
               key={article.id}
-              className="flex flex-col gap-4 py-5 first:pt-0 lg:flex-row lg:items-center lg:justify-between"
+              className="flex flex-col gap-4 px-4 py-4 transition-colors hover:bg-[var(--surface-muted)] sm:px-5 lg:flex-row lg:items-center lg:justify-between"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -168,6 +169,7 @@ export default function ArticlesPage() {
             );
           })}
         </ul>
+        </Card>
       )}
       <AgentPreviewDialog article={previewArticle} open={Boolean(previewArticle)} onClose={() => setPreviewArticle(null)} />
     </div>

@@ -33,7 +33,7 @@ export default function SettingsPage() {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Settings" description="Manage your writer profile, receiving wallet, and developer access." />
+      <PageHeader title="Settings" />
 
       {creator.status === "loading" && <LoadingState />}
       {creator.status === "error" && creator.error && <ErrorState error={creator.error} onRetry={creator.refetch} />}

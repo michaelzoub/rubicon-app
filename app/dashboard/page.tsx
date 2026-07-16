@@ -20,13 +20,13 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useRubiconQuery } from "@/lib/rubicon/hooks";
 import { useAnalyticsOverview } from "@/lib/analytics/hooks";
 import type { AnalyticsDailyMetric, AnalyticsRecentRead, AnalyticsOverviewResponse } from "@/lib/analytics/types";
-import { buildAgentActivityHeatmap } from "@/lib/rubicon/dashboard-analytics";
 import { atomicToUsd, formatUsdAtomicDisplay, formatUsdDisplay, formatUsdNumber } from "@/lib/rubicon/pricing";
 import type { Article } from "@/lib/rubicon/types";
 import { ACTIVE_CHAIN } from "@/lib/chain";
 import { explorerAddressUrl, formatBalance, useNativeBalance } from "@/lib/onchain";
 import { WithdrawDialog } from "./_components/withdraw-dialog";
-import { CountUp, Donut, DONUT_COLORS, InsightTile, Reveal, type DonutSlice, type TrendBar } from "./_components/charts";
+import { DashboardDialog } from "./_components/overlays";
+import { buildEarningsDonutSlices, CountUp, Donut, InsightTile, Reveal, type DonutSlice, type TrendBar } from "./_components/charts";
 import {
   ContentProtectionPolicy,
   DashboardOverviewContent,
@@ -66,6 +66,7 @@ export default function OverviewPage() {
   const hasArticles = (articles.data?.length ?? 0) > 0;
   const hasLive = (articles.data ?? []).some((a) => a.state === "live");
   const onboardingComplete = !forceNewUser && walletConnected && hasLive;
+  const historicalAnalytics = useAnalyticsOverview({ allTime: true }, { enabled: onboardingComplete });
   const initialLoading = metadataLoading || (onboardingComplete && analytics.isPending && !analytics.data);
   const refreshing = !initialLoading && ([articles, wallet].some((q) => q.status === "loading" && q.data) || analytics.isFetching);
   const firstError = [articles, wallet].find((q) => q.status === "error" && !q.data)?.error
@@ -79,15 +80,12 @@ export default function OverviewPage() {
     () => buildTrend(analytics.data?.daily ?? [], "words"),
     [analytics.data?.daily],
   );
-  const earningsSlices = useMemo(() => buildEarningsSlices(analytics.data?.topArticles ?? []), [analytics.data?.topArticles]);
-  const activityHeatmap = useMemo(
-    () => buildAgentActivityHeatmap(
-      analytics.data?.recentReads ?? [],
-      28,
-      new Date(),
-      countAgentReadsInTrailingDays(analytics.data?.daily ?? [], 28),
+  const earningsSlices = useMemo(
+    () => buildEarningsSlices(
+      historicalAnalytics.data?.topArticles ?? [],
+      historicalAnalytics.data?.totals.settledCreatorAmountAtomic ?? "0",
     ),
-    [analytics.data?.daily, analytics.data?.recentReads],
+    [historicalAnalytics.data?.topArticles, historicalAnalytics.data?.totals.settledCreatorAmountAtomic],
   );
   const totalEarned = atomicToUsd(analytics.data?.totals.settledCreatorAmountAtomic);
 
@@ -98,7 +96,26 @@ export default function OverviewPage() {
 
   const overviewProps: DashboardOverviewProps | null = useMemo(() => {
     if (!onboardingComplete || !analytics.data || !wallet.data) return null;
-    const articleList = analytics.data.topArticles;
+    const rankedArticleIds = new Set(analytics.data.topArticles.map((article) => article.articleId));
+    const articleList = [
+      ...analytics.data.topArticles,
+      ...(articles.data ?? [])
+        .filter((article) => article.state !== "deleted" && !rankedArticleIds.has(article.id))
+        .map((article) => ({
+          articleId: article.id,
+          title: article.title,
+          state: article.state,
+          accessMode: article.accessMode,
+          wordsRead: 0,
+          paidWords: 0,
+          agentReads: 0,
+          uniqueAgents: 0,
+          creatorAmountAtomic: "0",
+          settledCreatorAmountAtomic: "0",
+          pendingCreatorAmountAtomic: "0",
+          lastReadAt: null,
+        })),
+    ];
     const paymentRows = analytics.data.recentReads.slice(0, 5).map((row) => ({
       id: row.bundleId,
       title: row.articleTitle,
@@ -137,7 +154,6 @@ export default function OverviewPage() {
         topArticle: analytics.data.topArticles[0]?.title ?? null,
         trendBars,
       },
-      activityCalendar: buildActivityCalendar(analytics.data.daily),
       stats: [
         {
           label: "Total earnings",
@@ -179,13 +195,12 @@ export default function OverviewPage() {
           value: atomicToUsd(article.settledCreatorAmountAtomic),
           href: article.state === "archived" || article.state === "deleted" ? undefined : `/dashboard/articles/${article.articleId}`,
         })),
-      breakdown: earningsSlices.length > 0
+      breakdown: historicalAnalytics.data && earningsSlices.length > 0
         ? {
-            totalEarned: formatUsdAtomicDisplay(analytics.data.totals.settledCreatorAmountAtomic),
+            totalEarned: formatUsdAtomicDisplay(historicalAnalytics.data.totals.settledCreatorAmountAtomic),
             slices: earningsSlices,
           }
         : null,
-      activityHeatmap,
       paymentRows,
       articleRows,
       wallet: {
@@ -201,9 +216,9 @@ export default function OverviewPage() {
   }, [
     analytics.data,
     articles.data,
-    activityHeatmap,
     earningsSlices,
     greeting,
+    historicalAnalytics.data,
     nativeBalance.status,
     nativeBalance.symbol,
     nativeBalance.value,
@@ -272,7 +287,7 @@ export default function OverviewPage() {
 
           {onboardingComplete && overviewProps && (
             <>
-              <AnalyticsStatusNotice analytics={analytics.data!} refreshError={analytics.error} />
+              <AnalyticsRefreshNotice refreshError={analytics.error} />
               {wallet.data?.address && (
                 <WithdrawDialog open={withdrawOpen} onClose={() => setWithdrawOpen(false)} walletAddress={wallet.data.address} />
               )}
@@ -292,17 +307,6 @@ export default function OverviewPage() {
         </>
       )}
     </div>
-  );
-}
-
-function countAgentReadsInTrailingDays(daily: AnalyticsDailyMetric[], days: number, now = new Date()): number {
-  const cutoff = new Date(now);
-  cutoff.setDate(cutoff.getDate() - days + 1);
-  const cutoffDate = cutoff.toISOString().slice(0, 10);
-  const today = now.toISOString().slice(0, 10);
-  return daily.reduce(
-    (total, row) => total + (row.date >= cutoffDate && row.date <= today ? row.agentReads : 0),
-    0,
   );
 }
 
@@ -587,20 +591,10 @@ function ExportButton({
       </button>
 
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setOpen(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Export card"
-        >
-          <div
-            className="w-full max-w-2xl overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-white"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <DashboardDialog open={open} onClose={() => setOpen(false)} labelledBy="legacy-export-card-title" className="max-w-2xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-[var(--faint)] px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold">Export card</h2>
+                <h2 id="legacy-export-card-title" className="text-base font-semibold">Export card</h2>
                 <p className="text-xs text-[var(--muted)]">Twitter-ready PNG · 1200 × 720</p>
               </div>
               <button
@@ -639,8 +633,7 @@ function ExportButton({
                 <p className="mt-2 text-xs text-[var(--muted)]">Image copy was blocked, so the PNG was downloaded instead.</p>
               )}
             </div>
-          </div>
-        </div>
+        </DashboardDialog>
       )}
     </>
   );
@@ -1182,24 +1175,11 @@ function hasPositiveAtomic(value: string): boolean {
   }
 }
 
-function AnalyticsStatusNotice({
-  analytics,
-  refreshError,
-}: {
-  analytics: AnalyticsOverviewResponse;
-  refreshError: Error | null;
-}) {
-  if (refreshError) {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-[#eddcbd] bg-[#fdf9f1] px-3 py-2 text-xs text-[#7b4e12]" role="status">
-        <span className="h-1.5 w-1.5 rounded-full bg-[#b7791f]" aria-hidden="true" /> Couldn’t refresh analytics. Showing the last successful response.
-      </div>
-    );
-  }
-  if (!analytics.freshness.stale) return null;
+function AnalyticsRefreshNotice({ refreshError }: { refreshError: Error | null }) {
+  if (!refreshError) return null;
   return (
-    <div className="flex items-center gap-2 rounded-md border border-[var(--line)] bg-[var(--surface-muted)] px-3 py-2 text-xs text-[var(--muted)]" role="status">
-      <span className="h-1.5 w-1.5 rounded-full bg-[var(--quiet)]" aria-hidden="true" /> Analytics are delayed. Reads and settlements may take a little longer to appear.
+    <div className="flex items-center gap-2 rounded-md border border-[#eddcbd] bg-[#fdf9f1] px-3 py-2 text-xs text-[#7b4e12]" role="status">
+      <span className="h-1.5 w-1.5 rounded-full bg-[#b7791f]" aria-hidden="true" /> Couldn’t refresh analytics. Showing the last successful response.
     </div>
   );
 }
@@ -1235,31 +1215,6 @@ function buildWeeklyDeltas(activity: AnalyticsDailyMetric[]): WeeklyDeltas {
     words: pct(cur.words, prev.words),
     reads: pct(cur.reads, prev.reads),
   };
-}
-
-function buildActivityCalendar(activity: AnalyticsDailyMetric[], weeks = 12): Array<{ date: string; count: number }> {
-  const now = new Date();
-  const start = new Date(now);
-  start.setDate(start.getDate() - weeks * 7 + 1);
-  start.setHours(0, 0, 0, 0);
-  const counts = new Map<string, number>();
-
-  for (const row of activity) {
-    const date = new Date(`${row.date}T00:00:00.000Z`);
-    if (Number.isNaN(date.getTime()) || date < start || date > now) continue;
-    const key = date.toISOString().slice(0, 10);
-    counts.set(key, (counts.get(key) ?? 0) + row.agentReads);
-  }
-
-  const days: Array<{ date: string; count: number }> = [];
-  const cursor = new Date(start);
-  while (cursor <= now) {
-    const key = cursor.toISOString().slice(0, 10);
-    days.push({ date: key, count: counts.get(key) ?? 0 });
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return days;
 }
 
 function DeltaHint({ pct, onDark = false }: { pct: number | null; onDark?: boolean }) {
@@ -1329,23 +1284,17 @@ function buildTrend(activity: AnalyticsDailyMetric[], metric: "earnings" | "word
   });
 }
 
-/** Top-earning articles as a compact three-segment donut, with the remainder folded into "Other". */
-function buildEarningsSlices(articles: AnalyticsOverviewResponse["topArticles"]): DonutSlice[] {
-  const earners = articles
-    .map((a) => ({ title: a.title, value: atomicToUsd(a.settledCreatorAmountAtomic) }))
-    .filter((a) => a.value > 0)
-    .sort((a, b) => b.value - a.value);
-  if (earners.length === 0) return [];
-
-  const top = earners.slice(0, 2);
-  const rest = earners.slice(2);
-  const slices: DonutSlice[] = top.map((a, i) => ({ label: a.title, value: a.value, color: DONUT_COLORS[i] }));
-  if (rest.length > 0) {
-    slices.push({
-      label: `${rest.length} more`,
-      value: rest.reduce((sum, a) => sum + a.value, 0),
-      color: DONUT_COLORS[2],
-    });
-  }
-  return slices;
+/** All-time settled earnings, including every article beyond the ranked response as one remainder slice. */
+function buildEarningsSlices(
+  articles: AnalyticsOverviewResponse["topArticles"],
+  totalSettledCreatorAmountAtomic: string,
+): DonutSlice[] {
+  const values = articles.map((article) => ({
+    label: article.title,
+    value: atomicToUsd(article.settledCreatorAmountAtomic),
+  }));
+  const remaining = Math.max(0, atomicToUsd(totalSettledCreatorAmountAtomic) - values.reduce((sum, article) => sum + article.value, 0));
+  return buildEarningsDonutSlices(
+    remaining > 0 ? [...values, { label: "All other articles", value: remaining }] : values,
+  );
 }

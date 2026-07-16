@@ -8,11 +8,12 @@ import { fetchAnalyticsOverview, fetchArticleAnalytics, type AnalyticsClientDate
 const STALE_TIME_MS = 30_000;
 const REFRESH_INTERVAL_MS = 60_000;
 
-export function useAnalyticsOverview(range: AnalyticsClientDateRange = {}) {
+export function useAnalyticsOverview(range: AnalyticsClientDateRange = {}, options: { enabled?: boolean } = {}) {
   const { getAccessToken } = usePrivy();
   return useQuery({
-    queryKey: ["analytics", "overview", range.from ?? null, range.to ?? null],
+    queryKey: ["analytics", "overview", range.from ?? null, range.to ?? null, range.allTime ?? false],
     queryFn: () => fetchAnalyticsOverview(getAccessToken, range),
+    enabled: options.enabled ?? true,
     staleTime: STALE_TIME_MS,
     refetchInterval: REFRESH_INTERVAL_MS,
     refetchIntervalInBackground: false,

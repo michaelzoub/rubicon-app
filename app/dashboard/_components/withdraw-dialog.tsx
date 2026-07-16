@@ -19,6 +19,7 @@ import {
   useGatewayBalance,
   type CompleteResult,
 } from "@/lib/gateway-client";
+import { DashboardDialog } from "./overlays";
 
 type Props = { open: boolean; onClose: () => void; walletAddress: string };
 
@@ -62,8 +63,6 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
       setDone(null);
     }
   }, [open, walletAddress]);
-
-  if (!open) return null;
 
   const available = balance.availableAtomic ?? BigInt(0);
   const hasPending = balance.withdrawingAtomic > BigInt(0);
@@ -138,24 +137,21 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={close}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Withdraw USDC"
+    <DashboardDialog
+      open={open}
+      onClose={close}
+      labelledBy="withdraw-dialog-title"
+      className="max-w-md overflow-hidden"
+      closeDisabled={!!busy}
+      dismissOnBackdrop={!busy}
     >
-      <div
-        className="w-full max-w-md overflow-hidden rounded-[var(--radius-lg)] border border-[var(--line)] bg-white"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-center justify-between border-b border-[var(--faint)] px-5 py-4">
-          <h2 className="text-base font-semibold">Withdraw USDC</h2>
+          <h2 id="withdraw-dialog-title" className="text-base font-semibold">Withdraw USDC</h2>
           <button
             type="button"
             onClick={close}
             disabled={!!busy}
-            className="text-[var(--muted)] transition-colors hover:text-[var(--ink)] disabled:opacity-40"
+            className="dashboard-icon-button disabled:opacity-40"
             aria-label="Close"
           >
             <X size={18} aria-hidden="true" />
@@ -321,8 +317,7 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
             </>
           )}
         </div>
-      </div>
-    </div>
+    </DashboardDialog>
   );
 }
 

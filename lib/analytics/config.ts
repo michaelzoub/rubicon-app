@@ -92,6 +92,12 @@ export function parseAnalyticsDateRange(
   now = new Date(),
 ): AnalyticsDateRange {
   const defaultTo = utcDate(now);
+  if (searchParams.get("allTime") === "1") {
+    const toExclusiveDate = new Date(`${defaultTo}T00:00:00.000Z`);
+    toExclusiveDate.setUTCDate(toExclusiveDate.getUTCDate() + 1);
+    return { from: "1970-01-01", to: defaultTo, toExclusive: utcDate(toExclusiveDate) };
+  }
+
   const defaultFromDate = new Date(`${defaultTo}T00:00:00.000Z`);
   defaultFromDate.setUTCDate(defaultFromDate.getUTCDate() - config.defaultRangeDays + 1);
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
-import { DONUT_COLORS, type DonutSlice, type TrendBar } from "../dashboard/_components/charts";
+import { useMemo, useState } from "react";
+import { X } from "lucide-react";
+import { buildEarningsDonutSlices, type TrendBar } from "../dashboard/_components/charts";
 import { DashboardOverviewContent, type DashboardOverviewProps } from "../dashboard/_components/overview-content";
+import { DashboardDialog } from "../dashboard/_components/overlays";
 import { DashboardFrame } from "../dashboard/_components/shell";
 
 const earningsTrend: TrendBar[] = [
@@ -31,21 +33,15 @@ const previewArticles = [
   { id: "article_machine_audiences", title: "Writing for Machine Audiences", words: 5810, reads: 15, earnings: "$25.76", state: "draft" as const },
 ];
 
-const earningsSlices: DonutSlice[] = previewArticles.map((article, index) => ({
-  label: article.title,
-  value: Number(article.earnings.replace("$", "")),
-  color: DONUT_COLORS[index],
-}));
-
-const previewHeatmapCells = Array.from({ length: 24 * 7 }, (_, index) => {
-  const hour = Math.floor(index / 7);
-  const day = index % 7;
-  const workingHours = hour >= 9 && hour <= 20;
-  const peak = hour >= 11 && hour <= 15;
-  return { day, hour, reads: workingHours ? (peak ? ((day * 3 + hour) % 7) + 2 : ((day + hour) % 4) + 1) : (day + hour) % 8 === 0 ? 1 : 0 };
-});
+const earningsSlices = buildEarningsDonutSlices(
+  previewArticles.map((article) => ({
+    label: article.title,
+    value: Number(article.earnings.replace("$", "")),
+  })),
+);
 
 export default function DashboardPreviewPage() {
+  const [previewWithdrawOpen, setPreviewWithdrawOpen] = useState(false);
   const overviewProps: DashboardOverviewProps = useMemo(
     () => ({
       greeting: "@previewcreator",
@@ -58,7 +54,6 @@ export default function DashboardPreviewPage() {
         topArticle: "The Agent Economy Is Already Here",
         trendBars: earningsTrend,
       },
-      activityCalendar: [],
       stats: [
         {
           label: "Total earnings",
@@ -69,6 +64,7 @@ export default function DashboardPreviewPage() {
           sparklineLabels: earningsTrend.map((bar) => bar.fullLabel),
           sparklineMetricLabel: "Earnings that day",
           sparklineDetails: earningsTrend.map((bar) => `${bar.detail ?? "0 words"} read`),
+          context: "Last 7 days",
         },
         {
           label: "Words read",
@@ -79,9 +75,10 @@ export default function DashboardPreviewPage() {
           sparklineLabels: earningsTrend.map((bar) => bar.fullLabel),
           sparklineMetricLabel: "Words read that day",
           sparklineDetails: earningsTrend.map((bar) => `${formatUsd(bar.value)} earned`),
+          context: "Last 7 days",
         },
-        { label: "Live articles", value: 3, format: formatInt },
-        { label: "Agent reads", value: 183, format: formatInt, deltaPct: 11 },
+        { label: "Live articles", value: 3, format: formatInt, context: "Published now" },
+        { label: "Agent reads", value: 183, format: formatInt, deltaPct: 11, context: "Last 7 days" },
       ],
       trendBars: earningsTrend,
       topArticles: previewArticles.slice(0, 6).map((article) => ({
@@ -94,11 +91,6 @@ export default function DashboardPreviewPage() {
       breakdown: {
         totalEarned: "$501.09",
         slices: earningsSlices,
-      },
-      activityHeatmap: {
-        cells: previewHeatmapCells,
-        totalReads: 183,
-        windowDays: 28,
       },
       paymentRows: [
         { id: "pay_1028", title: "The Agent Economy Is Already Here", occurredAt: "Just now", amount: "$19.00", status: "completed" },
@@ -128,7 +120,7 @@ export default function DashboardPreviewPage() {
           </>
         ),
         onCopy: () => undefined,
-        onWithdraw: () => undefined,
+        onWithdraw: () => setPreviewWithdrawOpen(true),
         onRefresh: () => undefined,
       },
     }),
@@ -138,6 +130,26 @@ export default function DashboardPreviewPage() {
   return (
     <DashboardFrame identity="@previewcreator" activePath="/dashboard">
       <DashboardOverviewContent {...overviewProps} />
+      <DashboardDialog
+        open={previewWithdrawOpen}
+        onClose={() => setPreviewWithdrawOpen(false)}
+        labelledBy="preview-withdraw-title"
+        className="max-w-md overflow-hidden"
+      >
+        <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
+          <h2 id="preview-withdraw-title" className="text-base font-semibold">Withdraw USDC</h2>
+          <button type="button" onClick={() => setPreviewWithdrawOpen(false)} className="dashboard-icon-button" aria-label="Close withdraw preview">
+            <X size={17} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="grid gap-3 p-5">
+          <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3">
+            <div className="dashboard-meta">Available balance</div>
+            <div className="mt-1 text-xl font-semibold tabular-nums">41.27 <span className="text-sm font-medium text-[var(--muted)]">USDC</span></div>
+          </div>
+          <p className="dashboard-meta">Preview state for validating payout-to-withdraw dialog replacement.</p>
+        </div>
+      </DashboardDialog>
     </DashboardFrame>
   );
 }

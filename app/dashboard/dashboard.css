@@ -1,0 +1,68 @@
+.dashboard-theme {
+  --dashboard-title-size: 0.875rem;
+  --dashboard-title-weight: 600;
+  --dashboard-meta-size: 0.75rem;
+  --dashboard-motion-fast: 140ms;
+  --dashboard-motion-base: 180ms;
+  --dashboard-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --dashboard-z-content: 0;
+  --dashboard-z-sticky: 20;
+  --dashboard-z-dropdown: 30;
+  --dashboard-z-popover: 40;
+  --dashboard-z-backdrop: 80;
+  --dashboard-z-dialog: 90;
+  --dashboard-z-notification: 110;
+}
+
+.dashboard-panel-title {
+  color: var(--quiet);
+  font-size: var(--dashboard-title-size);
+  font-weight: var(--dashboard-title-weight);
+  line-height: 1.35;
+}
+
+.dashboard-meta {
+  color: var(--muted);
+  font-size: var(--dashboard-meta-size);
+  line-height: 1.45;
+}
+
+.dashboard-tooltip-layer,
+.dashboard-metric-cell {
+  z-index: var(--dashboard-z-content);
+}
+
+.dashboard-tooltip-layer:hover,
+.dashboard-tooltip-layer:focus-within,
+.dashboard-metric-cell:hover,
+.dashboard-metric-cell:focus-within {
+  z-index: var(--dashboard-z-popover);
+}
+
+.dashboard-theme .button:active,
+.dashboard-theme .dashboard-icon-button:active,
+.dashboard-theme .dashboard-nav-icon-link:active {
+  transform: scale(0.96);
+}
+
+.dashboard-theme .button,
+.dashboard-theme .dashboard-icon-button,
+.dashboard-theme .dashboard-nav-icon-link {
+  transition-duration: var(--dashboard-motion-fast);
+  transition-timing-function: var(--dashboard-ease-out);
+}
+
+.dashboard-theme .dashboard-icon-button,
+.dashboard-theme .dashboard-nav-icon-link {
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-theme .button,
+  .dashboard-theme .dashboard-icon-button,
+  .dashboard-theme .dashboard-nav-icon-link {
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
+}
