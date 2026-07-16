@@ -8,6 +8,22 @@ import { DashboardDialog } from "../dashboard/_components/overlays";
 import { DashboardFrame } from "../dashboard/_components/shell";
 
 const earningsTrend: TrendBar[] = [
+  { label: "May 26", fullLabel: "Tue, May 26", value: 12.8, detail: "1,280 words" },
+  { label: "May 27", fullLabel: "Wed, May 27", value: 21.45, detail: "2,145 words" },
+  { label: "May 28", fullLabel: "Thu, May 28", value: 8.9, detail: "890 words" },
+  { label: "May 29", fullLabel: "Fri, May 29", value: 34.6, detail: "3,460 words" },
+  { label: "May 30", fullLabel: "Sat, May 30", value: 17.25, detail: "1,725 words" },
+  { label: "May 31", fullLabel: "Sun, May 31", value: 26.8, detail: "2,680 words" },
+  { label: "Jun 1", fullLabel: "Mon, Jun 1", value: 45.4, detail: "4,540 words" },
+  { label: "Jun 2", fullLabel: "Tue, Jun 2", value: 29.15, detail: "2,915 words" },
+  { label: "Jun 3", fullLabel: "Wed, Jun 3", value: 38.72, detail: "3,872 words" },
+  { label: "Jun 4", fullLabel: "Thu, Jun 4", value: 16.9, detail: "1,690 words" },
+  { label: "Jun 5", fullLabel: "Fri, Jun 5", value: 57.35, detail: "5,735 words" },
+  { label: "Jun 6", fullLabel: "Sat, Jun 6", value: 41.6, detail: "4,160 words" },
+  { label: "Jun 7", fullLabel: "Sun, Jun 7", value: 23.48, detail: "2,348 words" },
+  { label: "Jun 8", fullLabel: "Mon, Jun 8", value: 49.25, detail: "4,925 words" },
+  { label: "Jun 9", fullLabel: "Tue, Jun 9", value: 27.6, detail: "2,760 words" },
+  { label: "Jun 10", fullLabel: "Wed, Jun 10", value: 36.84, detail: "3,684 words" },
   { label: "Jun 11", fullLabel: "Thu, Jun 11", value: 18.42, detail: "1,842 words" },
   { label: "Jun 12", fullLabel: "Fri, Jun 12", value: 31.85, detail: "3,185 words" },
   { label: "Jun 13", fullLabel: "Sat, Jun 13", value: 24.7, detail: "2,470 words" },
@@ -33,11 +49,28 @@ const previewArticles = [
   { id: "article_machine_audiences", title: "Writing for Machine Audiences", words: 5810, reads: 15, earnings: "$25.76", state: "draft" as const },
 ];
 
+const historicalPreviewArticles = [
+  ...previewArticles,
+  { id: "article_protocol_notes", title: "Protocol Notes for Independent Creators", earnedIn: "May 2026", earnings: "$246.80" },
+  { id: "article_compound_distribution", title: "Distribution Compounds in Public", earnedIn: "Apr 2026", earnings: "$231.45" },
+  { id: "article_agentic_media", title: "The Shape of Agentic Media", earnedIn: "Mar 2026", earnings: "$198.20" },
+  { id: "article_pricing_attention", title: "Pricing Attention Without Ads", earnedIn: "Feb 2026", earnings: "$174.90" },
+  { id: "article_ai_native_publication", title: "What an AI-Native Publication Looks Like", earnedIn: "Jan 2026", earnings: "$151.70" },
+  { id: "article_reading_as_interface", title: "Reading Is Becoming an Interface", earnedIn: "Dec 2025", earnings: "$128.55" },
+  { id: "article_small_networks", title: "Small Networks, Durable Audiences", earnedIn: "Nov 2025", earnings: "$112.40" },
+  { id: "article_unbundled_essays", title: "The Return of the Unbundled Essay", earnedIn: "Oct 2025", earnings: "$96.80" },
+  { id: "article_buyer_intent", title: "When Buyer Intent Becomes Legible", earnedIn: "Sep 2025", earnings: "$82.15" },
+  { id: "article_market_for_context", title: "A Market for Context", earnedIn: "Aug 2025", earnings: "$71.60" },
+];
+
+const allTimeEarnings = historicalPreviewArticles.reduce((total, article) => total + Number(article.earnings.replace("$", "")), 0);
+const recentEarnings = earningsTrend.slice(-7).reduce((total, bar) => total + bar.value, 0);
 const earningsSlices = buildEarningsDonutSlices(
-  previewArticles.map((article) => ({
+  historicalPreviewArticles.map((article) => ({
     label: article.title,
     value: Number(article.earnings.replace("$", "")),
   })),
+  7,
 );
 
 export default function DashboardPreviewPage() {
@@ -48,7 +81,7 @@ export default function DashboardPreviewPage() {
       exportData: {
         username: "@previewcreator",
         avatarUrl: null,
-        totalEarned: 501.09,
+        totalEarned: allTimeEarnings,
         wordsRead: 50005,
         agentReads: 183,
         topArticle: "The Agent Economy Is Already Here",
@@ -57,7 +90,7 @@ export default function DashboardPreviewPage() {
       stats: [
         {
           label: "Total earnings",
-          value: 501.09,
+          value: recentEarnings,
           format: formatUsd,
           deltaPct: 14,
           sparklineValues: earningsTrend.map((bar) => bar.value),
@@ -89,7 +122,7 @@ export default function DashboardPreviewPage() {
         href: `/dashboard/articles/${article.id}`,
       })),
       breakdown: {
-        totalEarned: "$501.09",
+        totalEarned: formatUsd(allTimeEarnings),
         slices: earningsSlices,
       },
       paymentRows: [

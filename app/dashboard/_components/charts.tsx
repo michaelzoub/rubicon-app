@@ -210,6 +210,7 @@ export function Donut({
   const safetyInset = 2;
   const radius = (size - activeStroke - safetyInset * 2) / 2;
   const circumference = 2 * Math.PI * radius;
+  const centerContentMaxWidth = Math.max(0, size - activeStroke - safetyInset * 2 - stroke);
 
   let offsetAcc = 0;
 
@@ -261,8 +262,10 @@ export function Donut({
         </svg>
         {showCenter && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <div className="text-xl font-semibold tracking-[-0.01em]">{centerValue}</div>
-            <div className="text-[0.68rem] text-[var(--muted)]">{centerLabel}</div>
+            <div className="min-w-0" style={{ maxWidth: centerContentMaxWidth }}>
+              <div className="truncate text-lg font-semibold tracking-[-0.01em]" title={centerValue}>{centerValue}</div>
+              <div className="truncate text-[0.68rem] text-[var(--muted)]" title={centerLabel}>{centerLabel}</div>
+            </div>
           </div>
         )}
       </div>
