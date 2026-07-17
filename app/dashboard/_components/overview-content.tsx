@@ -813,6 +813,11 @@ function ExportButton({
 
   // check which preset images actually load
   useEffect(() => {
+    // Export assets are only needed after the dialog opens. Loading and
+    // decoding them during dashboard hydration competes with the first paint,
+    // which is especially noticeable on the static dashboard preview.
+    if (!open) return;
+
     let cancelled = false;
     void Promise.all(PRESET_BACKGROUNDS.map(async (preset) => ({ preset, image: await loadImage(preset.src) })))
       .then((results) => {
@@ -824,6 +829,10 @@ function ExportButton({
   const allBackgrounds = [...loadedPresets, ...customBgs];
 
   useEffect(() => {
+    // Keep the expensive canvas work out of the initial dashboard load. The
+    // cached result remains available for later openings of this dialog.
+    if (!open) return;
+
     const sequence = ++renderSequenceRef.current;
     const renderKey = JSON.stringify({ username, avatarUrl, totalEarned, wordsRead, agentReads, topArticle, trendBars, bgImage });
     const cached = renderCacheRef.current.get(renderKey);
@@ -848,7 +857,7 @@ function ExportButton({
       setPngUrl(url);
       setRendering(false);
     });
-  }, [agentReads, avatarUrl, topArticle, totalEarned, trendBars, username, wordsRead, bgImage]);
+  }, [agentReads, avatarUrl, topArticle, totalEarned, trendBars, username, wordsRead, bgImage, open]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
