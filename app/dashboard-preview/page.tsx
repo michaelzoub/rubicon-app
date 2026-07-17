@@ -40,34 +40,32 @@ const earningsTrend: TrendBar[] = [
   { label: "Jun 24", fullLabel: "Wed, Jun 24", value: 19, detail: "1,900 words" },
 ];
 
-const previewArticles = [
-  { id: "article_agent_economy", title: "The Agent Economy Is Already Here", words: 12840, reads: 58, earnings: "$142.60", state: "live" as const },
-  { id: "article_interfaces_markets", title: "Why Interfaces Become Markets", words: 9640, reads: 43, earnings: "$119.40", state: "live" as const },
-  { id: "article_ai_distribution", title: "AI Distribution After Search", words: 11320, reads: 39, earnings: "$102.75", state: "live" as const },
-  { id: "article_autonomous_readers", title: "Designing for Autonomous Readers", words: 7280, reads: 21, earnings: "$64.25", state: "paused" as const },
-  { id: "article_bundle_economics", title: "The New Bundle Economics", words: 6330, reads: 18, earnings: "$46.33", state: "live" as const },
-  { id: "article_machine_audiences", title: "Writing for Machine Audiences", words: 5810, reads: 15, earnings: "$25.76", state: "draft" as const },
+const previewArticleSeed = [
+  { id: "article_agent_economy", title: "The Agent Economy Is Already Here", words: 12840, reads: 58, earnings: "$142.60", state: "live" as const, earnedIn: "Jun 2026" },
+  { id: "article_interfaces_markets", title: "Why Interfaces Become Markets", words: 9640, reads: 43, earnings: "$119.40", state: "live" as const, earnedIn: "Jun 2026" },
+  { id: "article_ai_distribution", title: "AI Distribution After Search", words: 11320, reads: 39, earnings: "$102.75", state: "live" as const, earnedIn: "Jun 2026" },
+  { id: "article_autonomous_readers", title: "Designing for Autonomous Readers", words: 7280, reads: 21, earnings: "$64.25", state: "paused" as const, earnedIn: "Jun 2026" },
+  { id: "article_bundle_economics", title: "The New Bundle Economics", words: 6330, reads: 18, earnings: "$46.33", state: "live" as const, earnedIn: "Jun 2026" },
+  { id: "article_machine_audiences", title: "Writing for Machine Audiences", words: 5810, reads: 15, earnings: "$25.76", state: "draft" as const, earnedIn: "Jun 2026" },
+  { id: "article_protocol_notes", title: "Protocol Notes for Independent Creators", words: 9140, reads: 61, earnings: "$246.80", state: "live" as const, earnedIn: "May 2026" },
+  { id: "article_compound_distribution", title: "Distribution Compounds in Public", words: 8820, reads: 56, earnings: "$231.45", state: "live" as const, earnedIn: "Apr 2026" },
+  { id: "article_agentic_media", title: "The Shape of Agentic Media", words: 7910, reads: 47, earnings: "$198.20", state: "archived" as const, earnedIn: "Mar 2026" },
+  { id: "article_pricing_attention", title: "Pricing Attention Without Ads", words: 7540, reads: 42, earnings: "$174.90", state: "archived" as const, earnedIn: "Feb 2026" },
+  { id: "article_ai_native_publication", title: "What an AI-Native Publication Looks Like", words: 6890, reads: 37, earnings: "$151.70", state: "archived" as const, earnedIn: "Jan 2026" },
+  { id: "article_reading_as_interface", title: "Reading Is Becoming an Interface", words: 6420, reads: 31, earnings: "$128.55", state: "archived" as const, earnedIn: "Dec 2025" },
+  { id: "article_small_networks", title: "Small Networks, Durable Audiences", words: 5730, reads: 28, earnings: "$112.40", state: "archived" as const, earnedIn: "Nov 2025" },
+  { id: "article_unbundled_essays", title: "The Return of the Unbundled Essay", words: 5210, reads: 24, earnings: "$96.80", state: "archived" as const, earnedIn: "Oct 2025" },
+  { id: "article_buyer_intent", title: "When Buyer Intent Becomes Legible", words: 4980, reads: 19, earnings: "$82.15", state: "archived" as const, earnedIn: "Sep 2025" },
+  { id: "article_market_for_context", title: "A Market for Context", words: 4620, reads: 17, earnings: "$71.60", state: "archived" as const, earnedIn: "Aug 2025" },
 ];
-const livePreviewArticles = previewArticles.filter((article) => article.state === "live");
+const previewArticles = previewArticleSeed.filter((article) => article.earnedIn === "Jun 2026");
+const livePreviewArticles = previewArticleSeed.filter((article) => article.state === "live");
+const historicalPreviewArticles = previewArticleSeed;
 
-const historicalPreviewArticles = [
-  ...previewArticles,
-  { id: "article_protocol_notes", title: "Protocol Notes for Independent Creators", earnedIn: "May 2026", earnings: "$246.80" },
-  { id: "article_compound_distribution", title: "Distribution Compounds in Public", earnedIn: "Apr 2026", earnings: "$231.45" },
-  { id: "article_agentic_media", title: "The Shape of Agentic Media", earnedIn: "Mar 2026", earnings: "$198.20" },
-  { id: "article_pricing_attention", title: "Pricing Attention Without Ads", earnedIn: "Feb 2026", earnings: "$174.90" },
-  { id: "article_ai_native_publication", title: "What an AI-Native Publication Looks Like", earnedIn: "Jan 2026", earnings: "$151.70" },
-  { id: "article_reading_as_interface", title: "Reading Is Becoming an Interface", earnedIn: "Dec 2025", earnings: "$128.55" },
-  { id: "article_small_networks", title: "Small Networks, Durable Audiences", earnedIn: "Nov 2025", earnings: "$112.40" },
-  { id: "article_unbundled_essays", title: "The Return of the Unbundled Essay", earnedIn: "Oct 2025", earnings: "$96.80" },
-  { id: "article_buyer_intent", title: "When Buyer Intent Becomes Legible", earnedIn: "Sep 2025", earnings: "$82.15" },
-  { id: "article_market_for_context", title: "A Market for Context", earnedIn: "Aug 2025", earnings: "$71.60" },
-];
-
-const allTimeEarnings = historicalPreviewArticles.reduce((total, article) => total + Number(article.earnings.replace("$", "")), 0);
+const allTimeEarnings = previewArticleSeed.reduce((total, article) => total + Number(article.earnings.replace("$", "")), 0);
 const recentEarnings = earningsTrend.slice(-7).reduce((total, bar) => total + bar.value, 0);
 const earningsSlices = buildEarningsDonutSlices(
-  historicalPreviewArticles.map((article) => ({
+  previewArticleSeed.map((article) => ({
     label: article.title,
     value: Number(article.earnings.replace("$", "")),
   })),
