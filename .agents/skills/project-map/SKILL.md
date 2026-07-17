@@ -39,4 +39,5 @@ description: Concise orientation map for important Rubicon app routes, architect
 - Typecheck: `pnpm exec tsc --noEmit --incremental false`
 - Browser tests: `pnpm test:e2e`
 - Production build: `pnpm build`
+- Production server: `pnpm start`
 - Formatting sanity: `git diff --check`

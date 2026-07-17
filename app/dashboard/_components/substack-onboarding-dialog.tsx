@@ -163,19 +163,6 @@ type UploadState =
   | { phase: "parsing" }
   | { phase: "error"; message: string };
 
-/**
- * First-paint surface while auth and creator state resolve. It deliberately
- * matches the opening onboarding frame so a new writer never sees dashboard
- * chrome before the flow begins.
- */
-export function OnboardingEntryScreen() {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-white" role="status" aria-label="Loading Rubicon">
-      <Image className="animate-pulse" src="/w_logo.png" alt="" width={52} height={52} priority />
-    </div>
-  );
-}
-
 export function SubstackOnboardingDialog({
   shouldOpen,
   forceOpen = false,
@@ -1940,7 +1927,10 @@ export function SubstackOnboardingDialog({
     </div>
   );
 
-  if (!portalReady) return <OnboardingEntryScreen />;
+  // The parent owns the auth/data loading surface. Returning another full-page
+  // loader here would remount it once for portal hydration and replay its
+  // entrance animation over the already-mounted dashboard.
+  if (!portalReady) return null;
   return createPortal(onboardingPage, document.body);
 }
 

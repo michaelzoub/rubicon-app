@@ -32,11 +32,12 @@ import {
   DashboardOverviewContent,
   type DashboardOverviewProps,
 } from "./_components/overview-content";
-import { OnboardingEntryScreen, SubstackOnboardingDialog } from "./_components/substack-onboarding-dialog";
+import { SubstackOnboardingDialog } from "./_components/substack-onboarding-dialog";
 import {
   ArticleStatePill,
   Card,
   CardHeader,
+  DashboardLoadingScreen,
   EmptyState,
   ErrorState,
   formatRelative,
@@ -67,11 +68,9 @@ export default function OverviewPage() {
   const hasLive = (articles.data ?? []).some((a) => a.state === "live");
   const onboardingComplete = !forceNewUser && walletConnected && hasLive;
   const historicalAnalytics = useAnalyticsOverview({ allTime: true }, { enabled: onboardingComplete });
-  // Keep the entry screen mounted through the complete first overview query.
-  // Rendering a skeleton between the entry screen and the real cards produces
-  // an especially noticeable double transition on cold connections. Historical
-  // analytics powers the initial earnings breakdown too, so wait for it here
-  // rather than letting that card arrive after the overview has mounted.
+  // Keep one loading surface through auth and the complete first overview query.
+  // Historical analytics powers the initial earnings breakdown too, so wait for
+  // it here rather than introducing a second loading phase after the logo.
   const analyticsLoading = onboardingComplete && (
     (analytics.isPending && !analytics.data)
     || (historicalAnalytics.isPending && !historicalAnalytics.data)
@@ -251,7 +250,7 @@ export default function OverviewPage() {
   return (
     <div className="grid gap-5">
       {initialLoading ? (
-        <OnboardingEntryScreen />
+        <DashboardLoadingScreen />
       ) : firstError ? (
         <ErrorState
           error={firstError}

@@ -9,9 +9,9 @@ const STALE_TIME_MS = 30_000;
 const REFRESH_INTERVAL_MS = 60_000;
 
 export function useAnalyticsOverview(range: AnalyticsClientDateRange = {}, options: { enabled?: boolean } = {}) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken, user } = usePrivy();
   return useQuery({
-    queryKey: ["analytics", "overview", range.from ?? null, range.to ?? null, range.allTime ?? false],
+    queryKey: ["analytics", user?.id ?? "anonymous", "overview", range.from ?? null, range.to ?? null, range.allTime ?? false],
     queryFn: () => fetchAnalyticsOverview(getAccessToken, range),
     enabled: options.enabled ?? true,
     staleTime: STALE_TIME_MS,
@@ -23,9 +23,9 @@ export function useAnalyticsOverview(range: AnalyticsClientDateRange = {}, optio
 }
 
 export function useArticleAnalytics(articleId: string, range: AnalyticsClientDateRange = {}) {
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken, user } = usePrivy();
   return useQuery({
-    queryKey: ["analytics", "article", articleId, range.from ?? null, range.to ?? null],
+    queryKey: ["analytics", user?.id ?? "anonymous", "article", articleId, range.from ?? null, range.to ?? null],
     queryFn: () => fetchArticleAnalytics(articleId, getAccessToken, range),
     enabled: Boolean(articleId),
     staleTime: STALE_TIME_MS,

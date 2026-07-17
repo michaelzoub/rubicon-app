@@ -1,7 +1,6 @@
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
-import { usePrivy } from "@privy-io/react-auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { ACTIVE_CHAIN } from "@/lib/chain";
@@ -32,11 +31,10 @@ function QueryProvider({ children }: { children: ReactNode }) {
 }
 
 function PrivyQueryProvider({ children }: { children: ReactNode }) {
-  const { user } = usePrivy();
-
-  // A new authenticated identity gets a new cache, so creator data can never
-  // bleed between account switches on the same browser.
-  return <QueryProvider key={user?.id ?? "anonymous"}>{children}</QueryProvider>;
+  // Query keys are identity-scoped in the data hooks. Keeping this provider
+  // mounted means Privy's auth hydration does not tear down and recreate the
+  // entire dashboard tree just as the first content query starts.
+  return <QueryProvider>{children}</QueryProvider>;
 }
 
 export function AppProviders({ children }: { children: ReactNode }) {

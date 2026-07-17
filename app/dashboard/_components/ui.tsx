@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { AlertTriangle, Inbox, Loader2, LogIn, Minus, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { RubiconError } from "@/lib/rubicon/client";
@@ -9,6 +10,15 @@ import type { AnalyticsSettlementStatus } from "@/lib/analytics/types";
 import { ARTICLE_STATE_LABELS } from "@/lib/rubicon/types";
 
 /* ---------- layout ---------- */
+
+/** Stable auth/data loading surface shared by dashboard entry points. */
+export function DashboardLoadingScreen() {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-white" role="status" aria-label="Loading Rubicon">
+      <Image src="/w_logo.png" alt="" width={52} height={52} priority />
+    </div>
+  );
+}
 
 export function PageHeader({
   title,

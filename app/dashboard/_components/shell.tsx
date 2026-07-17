@@ -20,9 +20,8 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { usePrivyConfigured } from "../../providers";
 import { RubiconBrand } from "../../_components/rubicon-brand";
-import { OnboardingEntryScreen } from "./substack-onboarding-dialog";
 import { WriterAuthSubstackCard } from "./writer-auth-substack-card";
-import { DashboardPageSkeleton } from "./ui";
+import { DashboardLoadingScreen, DashboardPageSkeleton } from "./ui";
 import {
   hasSeenWriterObjectionPrompt,
   markWriterObjectionPromptSeen,
@@ -67,7 +66,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     // dashboard chrome until that decision is known, otherwise new writers see
     // the wrong product state flash before onboarding opens.
     if (pathname === "/dashboard" || pathname === "/dashboard-newuser") {
-      return <OnboardingEntryScreen />;
+      return <DashboardLoadingScreen />;
     }
     return (
       <DashboardFrame identity="Writer">
