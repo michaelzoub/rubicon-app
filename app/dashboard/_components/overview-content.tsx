@@ -803,35 +803,26 @@ function ExportButton({
   const renderSequenceRef = useRef(0);
   const renderCacheRef = useRef(new Map<string, string>());
   const [open, setOpen] = useState(false);
+  const [warmPreview, setWarmPreview] = useState(false);
   const [pngUrl, setPngUrl] = useState<string | null>(null);
   const [rendering, setRendering] = useState(true);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "blocked">("idle");
   const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
   const [bgImage, setBgImage] = useState<string>("/DB_BG.png");
   const [customBgs, setCustomBgs] = useState<{ src: string; label: string }[]>([]);
-  const [loadedPresets, setLoadedPresets] = useState<{ src: string; label: string }[]>([]);
 
-  // check which preset images actually load
   useEffect(() => {
-    // Export assets are only needed after the dialog opens. Loading and
-    // decoding them during dashboard hydration competes with the first paint,
-    // which is especially noticeable on the static dashboard preview.
-    if (!open) return;
-
-    let cancelled = false;
-    void Promise.all(PRESET_BACKGROUNDS.map(async (preset) => ({ preset, image: await loadImage(preset.src) })))
-      .then((results) => {
-        if (!cancelled) setLoadedPresets(results.filter(({ image }) => image).map(({ preset }) => preset));
-      });
-    return () => { cancelled = true; };
+    // Let the overview complete its one entrance transition, then prepare the
+    // default card offscreen. Opening Export is consequently instant while the
+    // page's initial paint remains free of canvas work.
+    const timer = window.setTimeout(() => setWarmPreview(true), 360);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  const allBackgrounds = [...loadedPresets, ...customBgs];
+  const allBackgrounds = [...PRESET_BACKGROUNDS, ...customBgs];
 
   useEffect(() => {
-    // Keep the expensive canvas work out of the initial dashboard load. The
-    // cached result remains available for later openings of this dialog.
-    if (!open) return;
+    if (!warmPreview && !open) return;
 
     const sequence = ++renderSequenceRef.current;
     const renderKey = JSON.stringify({ username, avatarUrl, totalEarned, wordsRead, agentReads, topArticle, trendBars, bgImage });
@@ -857,7 +848,7 @@ function ExportButton({
       setPngUrl(url);
       setRendering(false);
     });
-  }, [agentReads, avatarUrl, topArticle, totalEarned, trendBars, username, wordsRead, bgImage, open]);
+  }, [agentReads, avatarUrl, topArticle, totalEarned, trendBars, username, wordsRead, bgImage, open, warmPreview]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -939,7 +930,12 @@ function ExportButton({
                     draggable={false}
                   />
                 ) : (
-                  <div className="aspect-square animate-pulse bg-[var(--surface-muted)]" />
+                  <img
+                    src={bgImage}
+                    alt=""
+                    className="block aspect-square h-auto w-full object-cover"
+                    aria-hidden="true"
+                  />
                 )}
                 {rendering && pngUrl && <div className="pointer-events-none absolute inset-0 bg-white/25" aria-label="Updating preview" />}
               </div>
