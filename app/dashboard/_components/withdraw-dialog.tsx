@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getEmbeddedConnectedWallet, useWallets } from "@privy-io/react-auth";
-import { ExternalLink, Loader2, X } from "lucide-react";
+import { Check, ExternalLink, Loader2, X } from "lucide-react";
 import { ACTIVE_CHAIN } from "@/lib/chain";
 import { formatBalance, useNativeBalance } from "@/lib/onchain";
 import {
@@ -20,6 +20,7 @@ import {
   type CompleteResult,
 } from "@/lib/gateway-client";
 import { DashboardDialog } from "./overlays";
+import { SuccessCelebration, useSuccessCelebration } from "./success-celebration";
 
 type Props = { open: boolean; onClose: () => void; walletAddress: string };
 
@@ -53,6 +54,7 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
   const [busy, setBusy] = useState<null | "initiating" | "completing">(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [done, setDone] = useState<DoneState | null>(null);
+  const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
 
   useEffect(() => {
     if (open) {
@@ -127,6 +129,7 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
       const result = await completeWithdrawal(wallet, { destination: dest, amountAtomic: balance.withdrawingAtomic });
       localStorage.removeItem(intentKey(walletAddress));
       setDone({ type: "completed", result });
+      markCompletion("success");
       gasBalance.refetch();
       balance.refetch();
     } catch (err) {
@@ -207,7 +210,12 @@ export function WithdrawDialog({ open, onClose, walletAddress }: Props) {
               </div>
 
               {done ? (
-                <SuccessPanel done={done} differentDestination={differentDestination} />
+                <SuccessPanel
+                  done={done}
+                  differentDestination={differentDestination}
+                  celebrationKey={celebrationKey}
+                  celebrating={celebrating}
+                />
               ) : (
                 <>
                   {hasPending && (
@@ -334,7 +342,17 @@ function TxLink({ label, hash }: { label: string; hash: `0x${string}` }) {
   );
 }
 
-function SuccessPanel({ done, differentDestination }: { done: DoneState; differentDestination: boolean }) {
+function SuccessPanel({
+  done,
+  differentDestination,
+  celebrationKey,
+  celebrating,
+}: {
+  done: DoneState;
+  differentDestination: boolean;
+  celebrationKey: number;
+  celebrating: boolean;
+}) {
   if (done.type === "initiated") {
     return (
       <div className="grid gap-2 rounded-lg border border-[var(--faint)] bg-[var(--surface-muted)] px-4 py-3">
@@ -348,8 +366,9 @@ function SuccessPanel({ done, differentDestination }: { done: DoneState; differe
     );
   }
   return (
-    <div className="grid gap-2 rounded-lg border border-[var(--faint)] bg-[var(--surface-muted)] px-4 py-3">
-      <p className="text-sm font-medium text-[var(--green)]">Withdrawal complete.</p>
+    <div className="relative grid gap-2 overflow-visible rounded-lg border border-[var(--faint)] bg-[var(--surface-muted)] px-4 py-3">
+      <SuccessCelebration active={celebrating} celebrationKey={celebrationKey} />
+      <p className="flex items-center gap-1.5 text-sm font-medium text-[var(--green)]"><Check size={15} aria-hidden="true" /> Withdrawal complete.</p>
       <p className="text-xs text-[var(--muted)]">
         {differentDestination
           ? "Your USDC was withdrawn and sent to your destination address."

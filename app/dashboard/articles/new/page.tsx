@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
 import {
@@ -9,6 +10,7 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronUp,
+  Check,
   FileText,
   Link2,
   PenLine,
@@ -27,6 +29,7 @@ import { OTHER_IMPORT_GROUP, PLATFORM_IMPORT_OPTIONS } from "@/lib/import/option
 import { MarkdownEditor } from "../../_components/markdown-editor";
 import { Card, formatDate, PageHeader, SafetyWarning, shortWallet, WalletStatePill } from "../../_components/ui";
 import { takeImport } from "../_import-handoff";
+import { SuccessCelebration, useSuccessCelebration } from "../../_components/success-celebration";
 
 const PARTIAL_IMPORT_NOTICE =
   "Only public preview content was imported. Paste the full gated body below to make it available to agents.";
@@ -69,6 +72,8 @@ export default function NewArticlePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [source, setSource] = useState<ImportedSource | null>(null);
+  const [published, setPublished] = useState(false);
+  const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
 
   // Pull in a stashed "Import from URL" result once, on mount. This is the only
   // place a draft is assembled from imported data — saving still goes through
@@ -184,6 +189,8 @@ export default function NewArticlePage() {
       if (publish) {
         try {
           await publishArticle.run(article.id);
+          setPublished(true);
+          markCompletion("success");
         } catch (err) {
           setSavedDraftId(article.id);
           setSubmitError(
@@ -194,6 +201,7 @@ export default function NewArticlePage() {
           return;
         }
       }
+      if (publish) await new Promise((resolve) => window.setTimeout(resolve, 850));
       router.push(`/dashboard/articles/${article.id}`);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Could not save the article.");
@@ -262,6 +270,9 @@ export default function NewArticlePage() {
           submitting={submitting}
           error={submitError}
           savedDraftId={savedDraftId}
+          published={published}
+          celebrating={celebrating}
+          celebrationKey={celebrationKey}
           ownershipMismatch={ownershipMismatch}
           safetyNotice={safetyNotice}
           onBack={() => setStep(2)}
@@ -741,6 +752,9 @@ function StepPublish({
   submitting,
   error,
   savedDraftId,
+  published,
+  celebrating,
+  celebrationKey,
   ownershipMismatch,
   safetyNotice,
   onBack,
@@ -758,12 +772,16 @@ function StepPublish({
   submitting: boolean;
   error: string | null;
   savedDraftId: string | null;
+  published: boolean;
+  celebrating: boolean;
+  celebrationKey: number;
   ownershipMismatch: boolean;
   safetyNotice: React.ReactNode;
   onBack: () => void;
   onSaveDraft: () => void;
   onPublish: () => void;
 }) {
+  const reduceMotion = useReducedMotion();
   const isFree = accessMode === "free";
   // Only paid articles need a verified wallet to publish; free articles pay out
   // nothing, so a missing/unverified wallet never blocks them.
@@ -825,9 +843,19 @@ function StepPublish({
           <button type="button" onClick={onSaveDraft} disabled={submitting || ownershipMismatch} className="button button-secondary disabled:opacity-50">
             Save draft
           </button>
-          <button type="button" onClick={onPublish} disabled={submitting || walletBlocksPublish || ownershipMismatch} className="button button-primary disabled:opacity-50">
-            {submitting ? "Publishing…" : "Publish article"}
-          </button>
+          <div className="relative overflow-visible">
+            <SuccessCelebration active={celebrating} celebrationKey={celebrationKey} />
+            <motion.button
+              type="button"
+              onClick={onPublish}
+              disabled={submitting || walletBlocksPublish || ownershipMismatch || published}
+              className="button button-primary relative disabled:opacity-50"
+              animate={!reduceMotion && published ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
+              transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+            >
+              {published ? <><Check size={16} aria-hidden="true" /> Published</> : submitting ? "Publishing…" : "Publish article"}
+            </motion.button>
+          </div>
         </div>
       </div>
       <p className="mt-3 text-right text-xs text-[var(--muted)]">

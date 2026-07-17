@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { Archive, ArrowLeft, BarChart3, Eye, Loader2, Pause, Play, ReceiptText, Trash2, X } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Archive, ArrowLeft, BarChart3, Check, Eye, Loader2, Pause, Play, ReceiptText, Trash2, X } from "lucide-react";
 import type { ArticleAccessMode, ArticleDetail } from "@/lib/rubicon/types";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { useArticleAnalytics } from "@/lib/analytics/hooks";
@@ -27,8 +28,10 @@ import {
 import { AgentPreviewDialog } from "../_components/agent-preview-dialog";
 import { MarkdownEditor } from "../../_components/markdown-editor";
 import { DashboardDialog } from "../../_components/overlays";
+import { SuccessCelebration, useSuccessCelebration } from "../../_components/success-celebration";
 
 export default function ArticleDetailPage() {
+  const reduceMotion = useReducedMotion();
   const params = useParams<{ articleId: string }>();
   const articleId = params.articleId;
   const router = useRouter();
@@ -56,6 +59,7 @@ export default function ArticleDetailPage() {
   const [editing, setEditing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
   const agentPreviewArticle = data
     ? {
         title: data.title,
@@ -100,20 +104,28 @@ export default function ArticleDetailPage() {
                 {editing ? "Close" : "Edit article"}
               </button>
               {data.state !== "archived" && data.state !== "deleted" && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    // Never let an imported X post that isn't theirs go live.
-                    if (data.state !== "live" && ownershipMismatch) return;
-                    if (data.state === "live") await pause.run(data.id);
-                    else await publish.run(data.id);
-                    article.refetch();
-                  }}
-                  disabled={publish.pending || pause.pending || (data.state !== "live" && ownershipMismatch)}
-                  className="button button-secondary text-sm disabled:opacity-50"
-                >
-                  {data.state === "live" ? <><Pause size={15} aria-hidden="true" /> Pause</> : <><Play size={15} aria-hidden="true" /> Publish</>}
-                </button>
+                <div className="relative overflow-visible">
+                  <SuccessCelebration active={celebrating} celebrationKey={celebrationKey} />
+                  <motion.button
+                    type="button"
+                    onClick={async () => {
+                      // Never let an imported X post that isn't theirs go live.
+                      if (data.state !== "live" && ownershipMismatch) return;
+                      if (data.state === "live") await pause.run(data.id);
+                      else {
+                        await publish.run(data.id);
+                        markCompletion("success");
+                      }
+                      article.refetch();
+                    }}
+                    disabled={publish.pending || pause.pending || (data.state !== "live" && ownershipMismatch)}
+                    className="button button-secondary relative text-sm disabled:opacity-50"
+                    animate={!reduceMotion && celebrating ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
+                    transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+                  >
+                    {celebrating ? <><Check size={15} aria-hidden="true" /> Published</> : data.state === "live" ? <><Pause size={15} aria-hidden="true" /> Pause</> : <><Play size={15} aria-hidden="true" /> Publish</>}
+                  </motion.button>
+                </div>
               )}
               {data.state !== "archived" && data.state !== "deleted" && (
                 <button

@@ -30,6 +30,7 @@ import { buildEarningsDonutSlices, CountUp, Donut, InsightTile, Reveal, type Don
 import {
   ContentProtectionPolicy,
   DashboardOverviewContent,
+  OverviewSkeleton,
   type DashboardOverviewProps,
 } from "./_components/overview-content";
 import { OnboardingEntryScreen, SubstackOnboardingDialog } from "./_components/substack-onboarding-dialog";
@@ -67,7 +68,12 @@ export default function OverviewPage() {
   const hasLive = (articles.data ?? []).some((a) => a.state === "live");
   const onboardingComplete = !forceNewUser && walletConnected && hasLive;
   const historicalAnalytics = useAnalyticsOverview({ allTime: true }, { enabled: onboardingComplete });
-  const initialLoading = metadataLoading || (onboardingComplete && analytics.isPending && !analytics.data);
+  // Analytics is the slow query (ClickHouse-backed). For a returning creator we
+  // know it's the onboarding-complete branch as soon as metadata lands, so we
+  // can show the faithful in-place skeleton (chrome stays mounted) instead of a
+  // full-page overlay — making it read as "loading" rather than "reloading".
+  const analyticsLoading = onboardingComplete && analytics.isPending && !analytics.data;
+  const initialLoading = metadataLoading || analyticsLoading;
   const refreshing = !initialLoading && ([articles, wallet].some((q) => q.status === "loading" && q.data) || analytics.isFetching);
   const firstError = [articles, wallet].find((q) => q.status === "error" && !q.data)?.error
     ?? (onboardingComplete && !analytics.data ? analytics.error : null);
@@ -241,7 +247,7 @@ export default function OverviewPage() {
 
   return (
     <div className="grid gap-5">
-      {initialLoading ? (
+      {metadataLoading ? (
         <OnboardingEntryScreen />
       ) : firstError ? (
         <ErrorState
@@ -252,6 +258,8 @@ export default function OverviewPage() {
             void analytics.refetch();
           }}
         />
+      ) : analyticsLoading ? (
+        <OverviewSkeleton refreshing={refreshing} />
       ) : (
         <>
           {!onboardingComplete && (

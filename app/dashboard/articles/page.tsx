@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Eye, FileText, Link2, Pause, Pencil, Play } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { Check, Eye, FileText, Link2, Pause, Pencil, Play } from "lucide-react";
 import type { Article } from "@/lib/rubicon/types";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { useAnalyticsOverview } from "@/lib/analytics/hooks";
@@ -20,8 +21,10 @@ import {
   SafetyBadge,
 } from "../_components/ui";
 import { AgentPreviewDialog } from "./_components/agent-preview-dialog";
+import { SuccessCelebration, useSuccessCelebration } from "../_components/success-celebration";
 
 export default function ArticlesPage() {
+  const reduceMotion = useReducedMotion();
   const articles = useRubiconQuery((c) => c.listArticles(), [], { queryKey: ["articles"] });
   const creator = useRubiconQuery((c) => c.getCreator(), [], { queryKey: ["creator"] });
   const analytics = useAnalyticsOverview();
@@ -29,6 +32,8 @@ export default function ArticlesPage() {
   const pause = useRubiconMutation((c, id: string) => c.pauseArticle(id));
   const [busyId, setBusyId] = useState<string | null>(null);
   const [previewArticle, setPreviewArticle] = useState<Article | null>(null);
+  const [publishedId, setPublishedId] = useState<string | null>(null);
+  const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
 
   function isStolen(article: Article): boolean {
     const source = article.importMeta?.sourcePlatform
@@ -43,7 +48,11 @@ export default function ArticlesPage() {
     setBusyId(article.id);
     try {
       if (article.state === "live") await pause.run(article.id);
-      else await publish.run(article.id);
+      else {
+        await publish.run(article.id);
+        setPublishedId(article.id);
+        markCompletion("success");
+      }
       articles.refetch();
     } catch {
       /* surfaced via mutation error below */
@@ -146,23 +155,26 @@ export default function ArticlesPage() {
                   <Pencil size={15} aria-hidden="true" /> Edit
                 </Link>
                 {article.state !== "archived" && article.state !== "deleted" && (
-                  <button
-                    type="button"
-                    onClick={() => toggle(article)}
-                    disabled={busyId === article.id || (article.state !== "live" && stolen)}
-                    title={article.state !== "live" && stolen ? "This imported X post belongs to another account" : undefined}
-                    className="button button-secondary justify-center whitespace-nowrap text-sm disabled:opacity-50"
-                  >
-                    {article.state === "live" ? (
-                      <>
-                        <Pause size={15} aria-hidden="true" /> Pause
-                      </>
-                    ) : (
-                      <>
-                        <Play size={15} aria-hidden="true" /> Publish
-                      </>
-                    )}
-                  </button>
+                  <div className="relative overflow-visible">
+                    <SuccessCelebration active={celebrating && publishedId === article.id} celebrationKey={celebrationKey} />
+                    <motion.button
+                      type="button"
+                      onClick={() => toggle(article)}
+                      disabled={busyId === article.id || (article.state !== "live" && stolen)}
+                      title={article.state !== "live" && stolen ? "This imported X post belongs to another account" : undefined}
+                      className="button button-secondary relative w-full justify-center whitespace-nowrap text-sm disabled:opacity-50"
+                      animate={!reduceMotion && celebrating && publishedId === article.id ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
+                      transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+                    >
+                      {celebrating && publishedId === article.id ? (
+                        <><Check size={15} aria-hidden="true" /> Published</>
+                      ) : article.state === "live" ? (
+                        <><Pause size={15} aria-hidden="true" /> Pause</>
+                      ) : (
+                        <><Play size={15} aria-hidden="true" /> Publish</>
+                      )}
+                    </motion.button>
+                  </div>
                 )}
               </div>
             </li>

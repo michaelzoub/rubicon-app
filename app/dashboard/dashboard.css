@@ -16,6 +16,19 @@
   --dashboard-z-notification: 110;
 }
 
+/* A single gentle opacity fade used when the overview first mounts, instead
+   of staggered per-section transforms that fought chart layout measurement.
+   The whole content block settles together as one object, like a slow
+   fade-in from a small fade rather than a cascading reveal. */
+@keyframes dashboard-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dashboard-theme .dashboard-fade-in {
+  animation: dashboard-fade-in 0.5s ease forwards;
+}
+
 .dashboard-panel-title {
   color: var(--quiet);
   font-size: var(--dashboard-title-size);
@@ -130,6 +143,10 @@
   }
 
   .dashboard-theme .animate-ping {
+    animation: none !important;
+  }
+
+  .dashboard-theme .dashboard-fade-in {
     animation: none !important;
   }
 }

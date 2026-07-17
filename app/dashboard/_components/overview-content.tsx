@@ -21,8 +21,9 @@ import type { ArticleState } from "@/lib/rubicon/types";
 import type { AnalyticsSettlementStatus } from "@/lib/analytics/types";
 import { formatUsdDisplay } from "@/lib/rubicon/pricing";
 import { RubiconBrand } from "../../_components/rubicon-brand";
-import { ChartEmptyState, CountUp, Donut, Reveal, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
+import { ChartEmptyState, CountUp, Donut, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
 import { DashboardDialog } from "./overlays";
+import { SuccessCelebration, useSuccessCelebration } from "./success-celebration";
 import {
   Card,
   CardHeader,
@@ -129,7 +130,7 @@ export function DashboardOverviewContent({
   const [payoutOpen, setPayoutOpen] = useState(false);
 
   return (
-    <div className="grid gap-3 sm:gap-4">
+    <div className="dashboard-fade-in grid gap-3 sm:gap-4">
       <PageHeader
         title="Overview"
         action={
@@ -144,27 +145,27 @@ export function DashboardOverviewContent({
         }
       />
 
-      <Reveal delay={0.02} className="dashboard-tooltip-layer relative">
+      <div className="dashboard-tooltip-layer relative">
         <UnifiedMetricsPanel stats={stats} />
-      </Reveal>
+      </div>
 
       <div className="grid min-w-0 gap-3 sm:gap-4">
         <div className={`grid min-w-0 gap-3 ${hasTopArticles ? "lg:grid-cols-[minmax(0,2.125fr)_minmax(18rem,1fr)]" : ""}`}>
-          <Reveal delay={0.06} className="h-full">
+          <div className="h-full">
             <MoneyActivityChart bars={exportData?.trendBars ?? trendBars} />
-          </Reveal>
+          </div>
 
           {hasTopArticles && (
-            <Reveal delay={0.09} className="h-full">
+            <div className="h-full">
               <TopArticlesPodium articles={topArticles} />
-            </Reveal>
+            </div>
           )}
         </div>
 
         {hasBreakdown && (
-          <Reveal delay={0.12} className="h-full">
+          <div className="h-full">
             <EarningsBreakdown breakdown={breakdown!} />
-          </Reveal>
+          </div>
         )}
 
         <div className="grid items-start gap-3 lg:grid-cols-2">
@@ -782,14 +783,13 @@ function PayoutConnectionDetails({ wallet }: { wallet: DashboardOverviewWallet }
 }
 
 const PRESET_BACKGROUNDS = [
-  { src: "/export-card-michele-1.jpeg", label: "Harbor" },
+  { src: "/DB_BG.png", label: "Rubicon" },
   { src: "/export-card-michele-2.jpg", label: "Orchard" },
   { src: "/export-card-michele-3.jpg", label: "Lakeside" },
   { src: "/export-card-michele-4.jpg", label: "Village path" },
-  { src: "/export-card-painting.png", label: "Pond" },
 ];
 
-const PRESET_THUMB_SIZE = 44;
+const PRESET_THUMB_SIZE = 76;
 
 function ExportButton({
   username,
@@ -802,32 +802,40 @@ function ExportButton({
 }: DashboardOverviewExport) {
   const reduceMotion = useReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const renderSequenceRef = useRef(0);
+  const renderCacheRef = useRef(new Map<string, string>());
   const [open, setOpen] = useState(false);
   const [pngUrl, setPngUrl] = useState<string | null>(null);
+  const [rendering, setRendering] = useState(true);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "blocked">("idle");
-  const [bgImage, setBgImage] = useState<string>("/export-card-michele-1.jpeg");
+  const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
+  const [bgImage, setBgImage] = useState<string>("/DB_BG.png");
   const [customBgs, setCustomBgs] = useState<{ src: string; label: string }[]>([]);
   const [loadedPresets, setLoadedPresets] = useState<{ src: string; label: string }[]>([]);
 
   // check which preset images actually load
   useEffect(() => {
-    const checkPresets = async () => {
-      const results: { src: string; label: string }[] = [];
-      for (const p of PRESET_BACKGROUNDS) {
-        const img = await loadImage(p.src);
-        if (img) results.push(p);
-      }
-      setLoadedPresets(results);
-    };
-    checkPresets();
+    let cancelled = false;
+    void Promise.all(PRESET_BACKGROUNDS.map(async (preset) => ({ preset, image: await loadImage(preset.src) })))
+      .then((results) => {
+        if (!cancelled) setLoadedPresets(results.filter(({ image }) => image).map(({ preset }) => preset));
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const allBackgrounds = [...loadedPresets, ...customBgs];
 
   useEffect(() => {
-    let cancelled = false;
-    setPngUrl(null);
-    renderExportPng({
+    const sequence = ++renderSequenceRef.current;
+    const renderKey = JSON.stringify({ username, avatarUrl, totalEarned, wordsRead, agentReads, topArticle, trendBars, bgImage });
+    const cached = renderCacheRef.current.get(renderKey);
+    if (cached) {
+      setPngUrl(cached);
+      setRendering(false);
+      return;
+    }
+    setRendering(true);
+    void renderExportPng({
       username,
       avatarUrl,
       amount: formatUsdDisplay(totalEarned),
@@ -837,11 +845,11 @@ function ExportButton({
       trendBars,
       bgImage,
     }).then((url) => {
-      if (!cancelled) setPngUrl(url);
+      if (!url || sequence !== renderSequenceRef.current) return;
+      renderCacheRef.current.set(renderKey, url);
+      setPngUrl(url);
+      setRendering(false);
     });
-    return () => {
-      cancelled = true;
-    };
   }, [agentReads, avatarUrl, topArticle, totalEarned, trendBars, username, wordsRead, bgImage]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -882,8 +890,10 @@ function ExportButton({
       }
       await navigator.clipboard.write([new ClipboardItem({ "image/png": dataUrlToPngBlob(pngUrl) })]);
       setCopyStatus("copied");
+      markCompletion("success");
     } catch {
       setCopyStatus("blocked");
+      markCompletion("failure");
     }
     window.setTimeout(() => setCopyStatus("idle"), 2200);
   };
@@ -894,8 +904,8 @@ function ExportButton({
         <Download size={15} aria-hidden="true" /> Export card
       </button>
 
-      <DashboardDialog open={open} onClose={() => setOpen(false)} labelledBy="export-card-title" className="max-w-md overflow-hidden">
-            <div className="flex items-center justify-between px-5 pb-3 pt-4">
+      <DashboardDialog open={open} onClose={() => setOpen(false)} labelledBy="export-card-title" className="max-h-[min(90vh,760px)] max-w-3xl">
+            <div className="flex items-center justify-between border-b border-[var(--faint)] px-5 py-3">
               <div>
                 <h2 id="export-card-title" className="text-base font-semibold">Export card</h2>
                 <p className="dashboard-meta">X-ready PNG · 1080 × 1350</p>
@@ -910,54 +920,8 @@ function ExportButton({
               </button>
             </div>
 
-            {allBackgrounds.length > 0 && (
-              <div className="mx-5 rounded-xl bg-[var(--surface-muted)] px-3 py-3">
-                <p className="mb-2 text-xs font-medium text-[var(--muted)]">Background</p>
-                <div className="flex flex-wrap gap-2">
-                  {allBackgrounds.map((bg) => (
-                    <button
-                      key={bg.src}
-                      type="button"
-                      onClick={() => setBgImage(bg.src)}
-                      title={bg.label}
-                      className={`relative overflow-hidden rounded-[var(--radius-ui)] border-2 transition-[border-color,transform] ${
-                        bgImage === bg.src
-                          ? "border-[var(--ink)]"
-                          : "border-[var(--line)] hover:border-[var(--muted)]"
-                      }`}
-                      style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
-                    >
-                      <img
-                        src={bg.src}
-                        alt={bg.label}
-                        className="h-full w-full object-cover"
-                        draggable={false}
-                      />
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Upload custom image"
-                    className="flex items-center justify-center rounded-[var(--radius-ui)] border border-dashed border-[var(--line)] text-[var(--muted)] transition-colors hover:border-[var(--muted)] hover:text-[var(--ink)]"
-                    style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
-                  >
-                    <ImagePlus size={17} aria-hidden="true" />
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    aria-label="Upload background image"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="p-5">
-              <div className="mx-auto w-full max-w-[320px] overflow-hidden rounded-[18px] bg-[#eceef4]">
+            <div className="grid gap-5 p-5 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] md:items-start">
+              <div className="relative mx-auto w-full max-w-[240px] overflow-hidden rounded-[18px] bg-[var(--surface-muted)]">
                 {pngUrl ? (
                   <img
                     src={pngUrl}
@@ -968,27 +932,80 @@ function ExportButton({
                 ) : (
                   <div className="aspect-[4/5] animate-pulse bg-[var(--surface-muted)]" />
                 )}
+                {rendering && pngUrl && <div className="pointer-events-none absolute inset-0 bg-white/25" aria-label="Updating preview" />}
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <button type="button" onClick={download} className="button button-primary justify-center text-sm" disabled={!pngUrl}>
-                  <Download size={15} aria-hidden="true" /> Download
-                </button>
-                <motion.button
-                  type="button"
-                  onClick={copyImage}
-                  className={`button export-copy-button justify-center text-sm ${copyStatus === "copied" ? "is-copied" : "button-secondary"}`}
-                  disabled={!pngUrl}
-                  animate={!reduceMotion && copyStatus === "copied" ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
-                  transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  {copyStatus === "copied" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
-                  <span aria-live="polite">{copyStatus === "copied" ? "Copied" : copyStatus === "blocked" ? "Copy blocked" : "Copy PNG"}</span>
-                </motion.button>
+              <div className="flex min-w-0 flex-col gap-5">
+                {allBackgrounds.length > 0 && (
+                  <div>
+                    <p className="mb-2.5 text-xs font-medium text-[var(--muted)]">Background</p>
+                    <div className="grid max-w-full grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-2.5">
+                      {allBackgrounds.map((bg) => (
+                        <button
+                          key={bg.src}
+                          type="button"
+                          onClick={() => setBgImage(bg.src)}
+                          title={bg.label}
+                          aria-pressed={bgImage === bg.src}
+                          className={`relative shrink-0 overflow-hidden rounded-[var(--radius-ui)] border-2 transition-[border-color] ${
+                            bgImage === bg.src
+                              ? "border-[var(--ink)]"
+                              : "border-[var(--line)] hover:border-[var(--muted)]"
+                          }`}
+                          style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
+                        >
+                          <img
+                            src={bg.src}
+                            alt={bg.label}
+                            className="h-full w-full object-cover"
+                            draggable={false}
+                          />
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Upload custom image"
+                        className="flex items-center justify-center rounded-[var(--radius-ui)] border border-dashed border-[var(--line)] text-[var(--muted)] transition-colors hover:border-[var(--muted)] hover:text-[var(--ink)]"
+                        style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
+                      >
+                        <ImagePlus size={18} aria-hidden="true" />
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        aria-label="Upload background image"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-auto grid gap-2.5">
+                  <button type="button" onClick={download} className="button button-primary justify-center text-sm" disabled={!pngUrl}>
+                    <Download size={15} aria-hidden="true" /> Download
+                  </button>
+                  <div className="relative overflow-visible">
+                    <SuccessCelebration active={celebrating} celebrationKey={celebrationKey} />
+                    <motion.button
+                      type="button"
+                      onClick={copyImage}
+                      className={`button export-copy-button relative w-full justify-center text-sm ${copyStatus === "copied" ? "is-copied" : "button-secondary"}`}
+                      disabled={!pngUrl || rendering}
+                      animate={!reduceMotion && copyStatus === "copied" ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
+                      transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+                    >
+                      {copyStatus === "copied" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+                      <span aria-live="polite">{copyStatus === "copied" ? "Copied" : copyStatus === "blocked" ? "Copy blocked" : "Copy PNG"}</span>
+                    </motion.button>
+                  </div>
+                  {copyStatus === "blocked" && (
+                    <p className="text-xs text-[var(--muted)]">This browser blocked image clipboard access. Use Download as a fallback.</p>
+                  )}
+                </div>
               </div>
-              {copyStatus === "blocked" && (
-                <p className="mt-2 text-xs text-[var(--muted)]">This browser blocked image clipboard access. Use Download as a fallback.</p>
-              )}
             </div>
       </DashboardDialog>
     </>
@@ -1034,13 +1051,14 @@ async function renderExportPng({
   ctx.scale(scale, scale);
   ctx.textBaseline = "alphabetic";
 
-  const INK = "#0b0d12";
-  const PAPER = "#ffffff";
-  const MUTED = "rgba(11,13,18,0.55)";
-  const QUIET = "rgba(11,13,18,0.34)";
-  const HAIRLINE = "rgba(11,13,18,0.12)";
-  const RIVER = "#7f9cd4";
-  const GAIN = "#1f8f4e";
+  // The card now sits over a full-strength background, so the typographic
+// hierarchy is light-on-dark: the dominant figure and labels are white, with
+// muted/quiet tiers pulled from white at decreasing opacity.
+  const INK = "#ffffff";
+  const PAPER = "#101114";
+  const MUTED = "rgba(255,255,255,0.72)";
+  const QUIET = "rgba(255,255,255,0.5)";
+  const HAIRLINE = "rgba(255,255,255,0.22)";
 
   // The dashboard's own faces (Hanken Grotesk / JetBrains Mono) carry into the
   // artifact; wait for them so the canvas doesn't rasterize a fallback.
@@ -1054,13 +1072,12 @@ async function renderExportPng({
 
   const [painting, logo, avatar] = await Promise.all([
     loadImage(bgImage),
-    loadImage("/Header-logo_b.svg"),
+    loadImage("/Header-logo_w.svg"),
     avatarUrl ? loadImage(avatarUrl) : Promise.resolve(null),
   ]);
 
-  const MARGIN = 64;
+  const MARGIN = 82;
   const RIGHT = W - MARGIN;
-  const CROSSING = 620;
 
   // letterSpacing lands on the 2d context in modern browsers but isn't yet in
   // the TS DOM lib; cast so the source type-checks.
@@ -1083,112 +1100,72 @@ async function renderExportPng({
     ctx.textAlign = "left";
   };
 
-  const hairline = (y: number) => {
-    ctx.strokeStyle = HAIRLINE;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(MARGIN, y);
-    ctx.lineTo(RIGHT, y);
-    ctx.stroke();
-  };
-
-  // ---- upper bank: the artwork, vivid and full-bleed ----------------------
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(0, 0, W, H);
+  // The chosen background runs full-strength edge to edge over the whole card
+// — no white scrim over it. Text legibility comes from soft local darkening
+// behind the typographic blocks (drawn later), so the artwork reads while the
+// data stays readable.
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  roundRect(ctx, 24, 24, W - 48, H - 48, 34);
+  ctx.clip();
   if (painting) {
-    drawCoverImage(ctx, painting, 0, 0, W, CROSSING);
+    drawCoverImage(ctx, painting, 24, 24, W - 48, H - 48);
+    // A faint top-to-bottom darkening keeps the white Rubicon mark, the date
+    // range, and the footer legible without bleaching the artwork — the only
+    // overlay on top of the background.
+    const shade = ctx.createLinearGradient(0, 24, 0, H - 24);
+    shade.addColorStop(0, "rgba(0,0,0,0.34)");
+    shade.addColorStop(0.4, "rgba(0,0,0,0.12)");
+    shade.addColorStop(0.62, "rgba(0,0,0,0.30)");
+    shade.addColorStop(1, "rgba(0,0,0,0.52)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(24, 24, W - 48, H - 48);
+  } else {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(24, 24, W - 48, H - 48);
   }
-
-  // Keep a dark wash under the white top chrome for legibility.
-  const chrome = ctx.createLinearGradient(0, 0, 0, 200);
-  chrome.addColorStop(0, "rgba(6,9,14,0.55)");
-  chrome.addColorStop(1, "rgba(6,9,14,0)");
-  ctx.fillStyle = chrome;
-  ctx.fillRect(0, 0, W, 200);
-
-  // The source SVG has a roomy square artboard. Crop to its horizontal lockup
-  // so the real white Rubicon mark sits cleanly in the top-left corner.
-  if (logo) {
-    // drawImage uses the SVG's intrinsic 2000px dimensions, not its 1500-unit
-    // viewBox. These source coordinates account for that 4/3 scale.
-    ctx.drawImage(logo, 110, 760, 1740, 470, MARGIN, 54, 210, 57);
-  }
-  monoLabel("PROOF OF PAID READS", RIGHT, 90, { align: "right", color: "rgba(255,255,255,0.85)" });
-
-  // ---- lower bank: the ledger ----------------------------------------------
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(0, CROSSING, W, H - CROSSING);
-
-  // The crossing itself — the only full-bleed rule on the card.
-  ctx.strokeStyle = "rgba(11,13,18,0.8)";
+  ctx.restore();
+  ctx.strokeStyle = "rgba(255,255,255,0.22)";
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, CROSSING);
-  ctx.lineTo(W, CROSSING);
+  roundRect(ctx, 25, 25, W - 50, H - 50, 33);
   ctx.stroke();
 
-  // ---- the figure, mid-crossing --------------------------------------------
-  // Sized to fit the column and drawn last across both banks.
+  // Real Rubicon lockup at top left, quiet range at top right.
+  if (logo) ctx.drawImage(logo, 110, 760, 1740, 470, MARGIN, 68, 196, 53);
+  const rangeStart = trendBars[0]?.label ?? "Start";
+  const rangeEnd = trendBars[trendBars.length - 1]?.label ?? "Today";
+  monoLabel(`${rangeStart} — ${rangeEnd}`, RIGHT, 100, { align: "right", color: QUIET, size: 12, tracking: "1.8px" });
+
+  monoLabel("TOTAL EARNINGS", MARGIN, 218, { color: MUTED, size: 14 });
   setSpacing("-4px");
-  let amountSize = 192;
+  let amountSize = 176;
   ctx.font = `800 ${amountSize}px ${SANS}`;
-  while (amountSize > 96 && ctx.measureText(amount).width > RIGHT - MARGIN) {
+  while (amountSize > 88 && ctx.measureText(amount).width > RIGHT - MARGIN) {
     amountSize -= 8;
     ctx.font = `800 ${amountSize}px ${SANS}`;
   }
   ctx.fillStyle = INK;
-  ctx.fillText(amount, MARGIN - 4, CROSSING + 96);
+  ctx.fillText(amount, MARGIN - 4, 394);
   setSpacing("0px");
 
-  // Positive growth is useful proof; negative growth is intentionally omitted
-  // from a share artifact rather than turning it into a dashboard report.
   const delta = computeTrendDelta(trendBars.map((bar) => bar.value));
-  const captionY = CROSSING + 152;
-  monoLabel("EARNED FROM AGENT READS", MARGIN, captionY, { size: 15 });
-  if (delta.up && delta.label.startsWith("+")) {
-    ctx.font = `700 15px ${MONO}`;
-    setSpacing("2.5px");
-    const captionW = ctx.measureText("EARNED FROM AGENT READS").width;
-    setSpacing("0px");
-    monoLabel(`${delta.label} VS PRIOR WEEK`, MARGIN + captionW + 28, captionY, { size: 15, color: GAIN });
-  }
+  monoLabel(`${delta.label} VS PREVIOUS PERIOD`, MARGIN, 454, { color: delta.up ? INK : MUTED, size: 14 });
 
-  // ---- ruled ledger rows ----------------------------------------------------
-  const rows = [
-    { label: "AGENT READS", value: reads, size: 32 },
-    { label: "PAID WORDS", value: words, size: 32 },
-    { label: "TOP PAID ARTICLE", value: topArticle, size: 26 },
-  ];
-  const ledgerTop = 838;
-  const rowH = 72;
-  rows.forEach((row, i) => {
-    const top = ledgerTop + i * rowH;
-    hairline(top);
-    monoLabel(row.label, MARGIN, top + 45);
-    ctx.font = `600 ${row.size}px ${SANS}`;
-    ctx.fillStyle = INK;
-    ctx.textAlign = "right";
-    ctx.fillText(truncateForCanvas(ctx, row.value, RIGHT - MARGIN - 260), RIGHT, top + 46);
-    ctx.textAlign = "left";
-  });
-  hairline(ledgerTop + rows.length * rowH);
+  monoLabel("EARNINGS ACTIVITY", MARGIN, 548, { color: MUTED, size: 13 });
+  drawEarningsLine(ctx, MARGIN, 594, RIGHT - MARGIN, 270, trendBars, { ink: INK, fill: "rgba(255,255,255,0.16)", baseline: HAIRLINE });
 
-  // ---- 14-day strip ---------------------------------------------------------
-  const stripLabelY = 1102;
-  monoLabel("EARNINGS ACTIVITY", MARGIN, stripLabelY, { color: QUIET });
-  monoLabel("LAST 14 DAYS", RIGHT, stripLabelY, { align: "right", color: QUIET });
-  drawEarningsStrip(ctx, MARGIN, 1126, RIGHT - MARGIN, 78, trendBars, {
-    paid: RIVER,
-    peak: INK,
-    rest: "rgba(11,13,18,0.22)",
-    baseline: HAIRLINE,
-    labels: QUIET,
-    mono: MONO,
-  });
+  monoLabel("AGENT READS", MARGIN, 1014, { color: QUIET, size: 12 });
+  monoLabel("PAID WORDS", 326, 1014, { color: QUIET, size: 12 });
+  monoLabel("TOP PAID ARTICLE", 570, 1014, { color: QUIET, size: 12 });
+  ctx.fillStyle = INK;
+  ctx.font = `700 36px ${SANS}`;
+  ctx.fillText(reads, MARGIN, 1062);
+  ctx.fillText(words, 326, 1062);
+  ctx.font = `650 27px ${SANS}`;
+  drawCanvasLines(ctx, topArticle, 570, 1058, RIGHT - 570, 34, 2);
 
-  // ---- signature ------------------------------------------------------------
-  const avatarSize = 44;
-  const avatarY = 1258;
+  const avatarSize = 42;
+  const avatarY = 1214;
   const footBaseline = avatarY + 29;
   ctx.save();
   ctx.beginPath();
@@ -1206,27 +1183,27 @@ async function renderExportPng({
     ctx.textAlign = "left";
   }
   ctx.restore();
-  ctx.strokeStyle = "rgba(11,13,18,0.18)";
+  ctx.strokeStyle = "rgba(255,255,255,0.32)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(MARGIN + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 - 0.5, 0, Math.PI * 2);
   ctx.stroke();
   ctx.fillStyle = INK;
-  ctx.font = `700 21px ${SANS}`;
+  ctx.font = `700 19px ${SANS}`;
   ctx.fillText(username, MARGIN + avatarSize + 16, footBaseline);
 
   // bottom-right: creator-first Rubicon attribution
   const lead = "Creating on ";
-  ctx.font = `500 18px ${SANS}`;
+  ctx.font = `500 17px ${SANS}`;
   const leadW = ctx.measureText(lead).width;
-  ctx.font = `700 18px ${SANS}`;
+  ctx.font = `700 17px ${SANS}`;
   const brandW = ctx.measureText("Rubicon").width;
   const attributionX = RIGHT - leadW - brandW;
   ctx.fillStyle = MUTED;
-  ctx.font = `500 18px ${SANS}`;
+  ctx.font = `500 17px ${SANS}`;
   ctx.fillText(lead, attributionX, footBaseline);
   ctx.fillStyle = INK;
-  ctx.font = `700 18px ${SANS}`;
+  ctx.font = `700 17px ${SANS}`;
   ctx.fillText("Rubicon", attributionX + leadW, footBaseline);
 
   return canvas.toDataURL("image/png");
@@ -1242,64 +1219,75 @@ function resolveCanvasFontStack(cssVar: string, fallback: string) {
   return families ? `${families}, ${fallback}` : fallback;
 }
 
-/**
- * The 14-day trend as a scan strip: one thin stroke per day rising from a
- * shared baseline — days agents paid read like marks on a scanned code, quiet
- * days stay as countable notches, and the best day is picked out in white.
- */
-function drawEarningsStrip(
+function drawEarningsLine(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   width: number,
   height: number,
   bars: TrendBar[],
-  colors: { paid: string; peak: string; rest: string; baseline: string; labels: string; mono: string },
+  colors: { ink: string; fill: string; baseline: string },
 ) {
-  const data = normalizeFourteenBars(bars);
-  const max = Math.max(...data.map((bar) => bar.value), 0);
-  const peak = data.reduce((best, bar, i) => (bar.value > data[best].value ? i : best), 0);
-  const baseY = y + height;
-  const slot = width / data.length;
-  const strokeW = 7;
+  const values = bars.length > 0 ? bars.map((bar) => Math.max(0, bar.value)) : [0, 0];
+  if (values.length === 1) values.push(values[0]);
+  const max = Math.max(...values, 0);
+  const domainMax = max > 0 ? max * 1.12 : 1;
+  const points = values.map((value, index) => ({
+    x: x + (index / (values.length - 1)) * width,
+    y: y + height - (value / domainMax) * height,
+  }));
 
-  data.forEach((bar, i) => {
-    const bx = x + i * slot + (slot - strokeW) / 2;
-    if (bar.value <= 0 || max <= 0) {
-      ctx.fillStyle = colors.rest;
-      ctx.fillRect(bx, baseY - 5, strokeW, 5);
-      return;
-    }
-    const strokeH = Math.max(10, (bar.value / max) * height);
-    ctx.fillStyle = i === peak ? colors.peak : colors.paid;
-    roundRect(ctx, bx, baseY - strokeH, strokeW, strokeH, 3);
-    ctx.fill();
-  });
+  const area = ctx.createLinearGradient(0, y, 0, y + height);
+  area.addColorStop(0, colors.fill);
+  area.addColorStop(1, "rgba(16,17,20,0)");
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, y + height);
+  points.forEach((point) => ctx.lineTo(point.x, point.y));
+  ctx.lineTo(points[points.length - 1].x, y + height);
+  ctx.closePath();
+  ctx.fillStyle = area;
+  ctx.fill();
+
+  ctx.beginPath();
+  points.forEach((point, index) => index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y));
+  ctx.strokeStyle = colors.ink;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
 
   ctx.strokeStyle = colors.baseline;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x, baseY + 2);
-  ctx.lineTo(x + width, baseY + 2);
+  ctx.moveTo(x, y + height + 1);
+  ctx.lineTo(x + width, y + height + 1);
   ctx.stroke();
-
-  ctx.fillStyle = colors.labels;
-  ctx.font = `700 12px ${colors.mono}`;
-  ctx.fillText(data[0]?.label ?? "", x, baseY + 28);
-  ctx.textAlign = "right";
-  ctx.fillText(data[data.length - 1]?.label ?? "", x + width, baseY + 28);
-  ctx.textAlign = "left";
 }
 
-function normalizeFourteenBars(bars: TrendBar[]): TrendBar[] {
-  const fallback = Array.from({ length: 14 }, (_, index) => ({
-    label: index === 0 ? "14d" : index === 13 ? "Now" : "",
-    fullLabel: "",
-    value: 0,
-  }));
-  if (bars.length === 0) return fallback;
-  if (bars.length >= 14) return bars.slice(bars.length - 14);
-  return [...fallback.slice(0, 14 - bars.length), ...bars];
+function drawCanvasLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number,
+) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth || !current) current = candidate;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  const visible = lines.slice(0, maxLines);
+  if (lines.length > maxLines) visible[maxLines - 1] = truncateForCanvas(ctx, `${visible[maxLines - 1]}…`, maxWidth);
+  visible.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
 }
 
 function drawCoverImage(
