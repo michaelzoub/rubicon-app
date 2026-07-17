@@ -789,8 +789,6 @@ const PRESET_BACKGROUNDS = [
   { src: "/export-card-michele-4.jpg", label: "Village path" },
 ];
 
-const PRESET_THUMB_SIZE = 76;
-
 function ExportButton({
   username,
   avatarUrl,
@@ -904,42 +902,43 @@ function ExportButton({
         <Download size={15} aria-hidden="true" /> Export card
       </button>
 
-      <DashboardDialog open={open} onClose={() => setOpen(false)} labelledBy="export-card-title" className="max-h-[min(90vh,760px)] max-w-3xl">
-            <div className="flex items-center justify-between border-b border-[var(--faint)] px-5 py-3">
-              <div>
-                <h2 id="export-card-title" className="text-base font-semibold">Export card</h2>
-                <p className="dashboard-meta">X-ready PNG · 1080 × 1350</p>
-              </div>
+      <DashboardDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        labelledBy="export-card-title"
+        className="export-card-dialog !w-[min(100%,20rem)]"
+      >
+            <div className="flex items-center justify-between px-4 py-2.5">
+              <h2 id="export-card-title" className="text-base font-semibold">Export card</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="dashboard-icon-button"
+                className="dashboard-icon-button h-7 min-h-7 w-7 min-w-7"
                 aria-label="Close"
               >
-                <X size={18} aria-hidden="true" />
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
 
-            <div className="grid gap-5 p-5 md:grid-cols-[minmax(0,240px)_minmax(0,1fr)] md:items-start">
-              <div className="relative mx-auto w-full max-w-[240px] overflow-hidden rounded-[18px] bg-[var(--surface-muted)]">
+            <div className="flex min-w-0 flex-col gap-3 p-4 pt-1">
+              <div className="relative mx-auto w-full shrink-0 overflow-hidden rounded-[18px] bg-[var(--surface-muted)]">
                 {pngUrl ? (
                   <img
                     src={pngUrl}
                     alt={`${username} Rubicon earnings export card`}
-                    className="block aspect-[4/5] h-auto w-full object-cover"
+                    className="block aspect-square h-auto w-full object-cover"
                     draggable={false}
                   />
                 ) : (
-                  <div className="aspect-[4/5] animate-pulse bg-[var(--surface-muted)]" />
+                  <div className="aspect-square animate-pulse bg-[var(--surface-muted)]" />
                 )}
                 {rendering && pngUrl && <div className="pointer-events-none absolute inset-0 bg-white/25" aria-label="Updating preview" />}
               </div>
 
-              <div className="flex min-w-0 flex-col gap-5">
+              <div className="flex min-w-0 flex-col gap-3">
                 {allBackgrounds.length > 0 && (
-                  <div>
-                    <p className="mb-2.5 text-xs font-medium text-[var(--muted)]">Background</p>
-                    <div className="grid max-w-full grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-2.5">
+                  <div className="min-w-0">
+                    <div className="grid grid-cols-5 gap-1.5">
                       {allBackgrounds.map((bg) => (
                         <button
                           key={bg.src}
@@ -947,12 +946,11 @@ function ExportButton({
                           onClick={() => setBgImage(bg.src)}
                           title={bg.label}
                           aria-pressed={bgImage === bg.src}
-                          className={`relative shrink-0 overflow-hidden rounded-[var(--radius-ui)] border-2 transition-[border-color] ${
+                          className={`relative aspect-square min-w-0 overflow-hidden rounded-[var(--radius-ui)] border-2 transition-[border-color] ${
                             bgImage === bg.src
                               ? "border-[var(--ink)]"
                               : "border-[var(--line)] hover:border-[var(--muted)]"
                           }`}
-                          style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
                         >
                           <img
                             src={bg.src}
@@ -966,8 +964,7 @@ function ExportButton({
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         title="Upload custom image"
-                        className="flex items-center justify-center rounded-[var(--radius-ui)] border border-dashed border-[var(--line)] text-[var(--muted)] transition-colors hover:border-[var(--muted)] hover:text-[var(--ink)]"
-                        style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
+                        className="aspect-square min-w-0 rounded-[var(--radius-ui)] border border-dashed border-[var(--line)] text-[var(--muted)] transition-colors hover:border-[var(--muted)] hover:text-[var(--ink)]"
                       >
                         <ImagePlus size={18} aria-hidden="true" />
                       </button>
@@ -983,11 +980,11 @@ function ExportButton({
                   </div>
                 )}
 
-                <div className="mt-auto grid gap-2.5">
+                <div className="mt-auto grid grid-cols-2 gap-2">
                   <button type="button" onClick={download} className="button button-primary justify-center text-sm" disabled={!pngUrl}>
                     <Download size={15} aria-hidden="true" /> Download
                   </button>
-                  <div className="relative overflow-visible">
+                  <div className="relative min-w-0 overflow-visible">
                     <SuccessCelebration active={celebrating} celebrationKey={celebrationKey} />
                     <motion.button
                       type="button"
@@ -1039,7 +1036,7 @@ async function renderExportPng({
   bgImage: string;
 }) {
   const W = 1080;
-  const H = 1350;
+  const H = 1080;
   // Render at 2x so the exported PNG stays crisp on retina and when scaled up
   // on social. All drawing below uses logical (1x) coordinates.
   const scale = 2;
@@ -1058,7 +1055,6 @@ async function renderExportPng({
   const PAPER = "#101114";
   const MUTED = "rgba(255,255,255,0.72)";
   const QUIET = "rgba(255,255,255,0.5)";
-  const HAIRLINE = "rgba(255,255,255,0.22)";
 
   // The dashboard's own faces (Hanken Grotesk / JetBrains Mono) carry into the
   // artifact; wait for them so the canvas doesn't rasterize a fallback.
@@ -1072,7 +1068,7 @@ async function renderExportPng({
 
   const [painting, logo, avatar] = await Promise.all([
     loadImage(bgImage),
-    loadImage("/Header-logo_w.svg"),
+    loadImage("/Header-logo_b.svg"),
     avatarUrl ? loadImage(avatarUrl) : Promise.resolve(null),
   ]);
 
@@ -1102,33 +1098,25 @@ async function renderExportPng({
 
   // The chosen background runs full-strength edge to edge over the whole card
 // — no white scrim over it. Text legibility comes from soft local darkening
-// behind the typographic blocks (drawn later), so the artwork reads while the
+  // behind the typographic blocks (drawn later), so the artwork reads while the
 // data stays readable.
   ctx.clearRect(0, 0, W, H);
-  ctx.save();
-  roundRect(ctx, 24, 24, W - 48, H - 48, 34);
-  ctx.clip();
   if (painting) {
-    drawCoverImage(ctx, painting, 24, 24, W - 48, H - 48);
+    drawCoverImage(ctx, painting, 0, 0, W, H);
     // A faint top-to-bottom darkening keeps the white Rubicon mark, the date
     // range, and the footer legible without bleaching the artwork — the only
     // overlay on top of the background.
-    const shade = ctx.createLinearGradient(0, 24, 0, H - 24);
+    const shade = ctx.createLinearGradient(0, 0, 0, H);
     shade.addColorStop(0, "rgba(0,0,0,0.34)");
     shade.addColorStop(0.4, "rgba(0,0,0,0.12)");
     shade.addColorStop(0.62, "rgba(0,0,0,0.30)");
     shade.addColorStop(1, "rgba(0,0,0,0.52)");
     ctx.fillStyle = shade;
-    ctx.fillRect(24, 24, W - 48, H - 48);
+    ctx.fillRect(0, 0, W, H);
   } else {
     ctx.fillStyle = PAPER;
-    ctx.fillRect(24, 24, W - 48, H - 48);
+    ctx.fillRect(0, 0, W, H);
   }
-  ctx.restore();
-  ctx.strokeStyle = "rgba(255,255,255,0.22)";
-  ctx.lineWidth = 2;
-  roundRect(ctx, 25, 25, W - 50, H - 50, 33);
-  ctx.stroke();
 
   // Real Rubicon lockup at top left, quiet range at top right.
   if (logo) ctx.drawImage(logo, 110, 760, 1740, 470, MARGIN, 68, 196, 53);
@@ -1152,20 +1140,20 @@ async function renderExportPng({
   monoLabel(`${delta.label} VS PREVIOUS PERIOD`, MARGIN, 454, { color: delta.up ? INK : MUTED, size: 14 });
 
   monoLabel("EARNINGS ACTIVITY", MARGIN, 548, { color: MUTED, size: 13 });
-  drawEarningsLine(ctx, MARGIN, 594, RIGHT - MARGIN, 270, trendBars, { ink: INK, fill: "rgba(255,255,255,0.16)", baseline: HAIRLINE });
+  drawEarningsLine(ctx, MARGIN, 584, RIGHT - MARGIN, 180, trendBars, { ink: INK, fill: "rgba(255,255,255,0.16)" });
 
-  monoLabel("AGENT READS", MARGIN, 1014, { color: QUIET, size: 12 });
-  monoLabel("PAID WORDS", 326, 1014, { color: QUIET, size: 12 });
-  monoLabel("TOP PAID ARTICLE", 570, 1014, { color: QUIET, size: 12 });
+  monoLabel("AGENT READS", MARGIN, 824, { color: QUIET, size: 12 });
+  monoLabel("PAID WORDS", 326, 824, { color: QUIET, size: 12 });
+  monoLabel("TOP PAID ARTICLE", 570, 824, { color: QUIET, size: 12 });
   ctx.fillStyle = INK;
   ctx.font = `700 36px ${SANS}`;
-  ctx.fillText(reads, MARGIN, 1062);
-  ctx.fillText(words, 326, 1062);
+  ctx.fillText(reads, MARGIN, 872);
+  ctx.fillText(words, 326, 872);
   ctx.font = `650 27px ${SANS}`;
-  drawCanvasLines(ctx, topArticle, 570, 1058, RIGHT - 570, 34, 2);
+  drawCanvasLines(ctx, topArticle, 570, 868, RIGHT - 570, 34, 2);
 
   const avatarSize = 42;
-  const avatarY = 1214;
+  const avatarY = 972;
   const footBaseline = avatarY + 29;
   ctx.save();
   ctx.beginPath();
@@ -1226,7 +1214,7 @@ function drawEarningsLine(
   width: number,
   height: number,
   bars: TrendBar[],
-  colors: { ink: string; fill: string; baseline: string },
+  colors: { ink: string; fill: string },
 ) {
   const values = bars.length > 0 ? bars.map((bar) => Math.max(0, bar.value)) : [0, 0];
   if (values.length === 1) values.push(values[0]);
@@ -1256,12 +1244,6 @@ function drawEarningsLine(
   ctx.lineCap = "round";
   ctx.stroke();
 
-  ctx.strokeStyle = colors.baseline;
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(x, y + height + 1);
-  ctx.lineTo(x + width, y + height + 1);
-  ctx.stroke();
 }
 
 function drawCanvasLines(

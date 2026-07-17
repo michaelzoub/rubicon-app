@@ -30,7 +30,6 @@ import { buildEarningsDonutSlices, CountUp, Donut, InsightTile, Reveal, type Don
 import {
   ContentProtectionPolicy,
   DashboardOverviewContent,
-  OverviewSkeleton,
   type DashboardOverviewProps,
 } from "./_components/overview-content";
 import { OnboardingEntryScreen, SubstackOnboardingDialog } from "./_components/substack-onboarding-dialog";
@@ -68,11 +67,15 @@ export default function OverviewPage() {
   const hasLive = (articles.data ?? []).some((a) => a.state === "live");
   const onboardingComplete = !forceNewUser && walletConnected && hasLive;
   const historicalAnalytics = useAnalyticsOverview({ allTime: true }, { enabled: onboardingComplete });
-  // Analytics is the slow query (ClickHouse-backed). For a returning creator we
-  // know it's the onboarding-complete branch as soon as metadata lands, so we
-  // can show the faithful in-place skeleton (chrome stays mounted) instead of a
-  // full-page overlay — making it read as "loading" rather than "reloading".
-  const analyticsLoading = onboardingComplete && analytics.isPending && !analytics.data;
+  // Keep the entry screen mounted through the complete first overview query.
+  // Rendering a skeleton between the entry screen and the real cards produces
+  // an especially noticeable double transition on cold connections. Historical
+  // analytics powers the initial earnings breakdown too, so wait for it here
+  // rather than letting that card arrive after the overview has mounted.
+  const analyticsLoading = onboardingComplete && (
+    (analytics.isPending && !analytics.data)
+    || (historicalAnalytics.isPending && !historicalAnalytics.data)
+  );
   const initialLoading = metadataLoading || analyticsLoading;
   const refreshing = !initialLoading && ([articles, wallet].some((q) => q.status === "loading" && q.data) || analytics.isFetching);
   const firstError = [articles, wallet].find((q) => q.status === "error" && !q.data)?.error
@@ -247,7 +250,7 @@ export default function OverviewPage() {
 
   return (
     <div className="grid gap-5">
-      {metadataLoading ? (
+      {initialLoading ? (
         <OnboardingEntryScreen />
       ) : firstError ? (
         <ErrorState
@@ -258,8 +261,6 @@ export default function OverviewPage() {
             void analytics.refetch();
           }}
         />
-      ) : analyticsLoading ? (
-        <OverviewSkeleton refreshing={refreshing} />
       ) : (
         <>
           {!onboardingComplete && (

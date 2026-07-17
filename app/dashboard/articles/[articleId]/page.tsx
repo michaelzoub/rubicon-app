@@ -73,7 +73,7 @@ export default function ArticleDetailPage() {
     : null;
 
   return (
-    <div className="grid gap-5">
+    <div className="dashboard-fade-in grid gap-4">
       <Link href="/dashboard/articles" className="inline-flex w-fit items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)]">
         <ArrowLeft size={15} aria-hidden="true" /> All articles
       </Link>

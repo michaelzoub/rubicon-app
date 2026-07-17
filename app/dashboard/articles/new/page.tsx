@@ -211,11 +211,16 @@ export default function NewArticlePage() {
   const submitting = createArticle.pending || publishArticle.pending;
 
   return (
-    <div className={step === 0 ? "article-compose-page" : "grid gap-6"}>
+    <div key={step} className={step === 0 ? "article-compose-page" : "dashboard-fade-in grid gap-4"}>
       {step === 0 ? null : (
         <>
           <PageHeader title="New article" description="Saved as a draft first. Nothing goes live until you publish." />
-          <Stepper current={step} />
+          <Stepper
+            current={step}
+            onSelect={(target) => {
+              if (target <= step) setStep(target);
+            }}
+          />
         </>
       )}
 
@@ -284,25 +289,30 @@ export default function NewArticlePage() {
   );
 }
 
-function Stepper({ current }: { current: number }) {
+function Stepper({ current, onSelect }: { current: number; onSelect: (step: number) => void }) {
   return (
-    <ol className="flex flex-wrap gap-2">
+    <ol className="article-stepper flex flex-wrap gap-1.5" aria-label="Article publishing progress">
       {steps.map((label, i) => {
         const active = i === current;
         const done = i < current;
         return (
-          <li
-            key={label}
-            className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm ${
-              active
-                ? "bg-[var(--river-pale)] text-[var(--river-deep)]"
-                : done
-                  ? "bg-[#e8f6ef] text-[#165c3e]"
-                  : "bg-[var(--surface-muted)] text-[var(--muted)]"
-            }`}
-          >
-            <span className="mono text-xs">{i + 1}</span>
-            {label}
+          <li key={label}>
+            <button
+              type="button"
+              onClick={() => onSelect(i)}
+              disabled={i > current}
+              aria-current={active ? "step" : undefined}
+              className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm transition-colors ${
+                active
+                  ? "border-[var(--ink)] bg-white text-[var(--ink)]"
+                  : done
+                    ? "border-[var(--line)] bg-white text-[var(--ink)] hover:bg-[var(--surface-muted)]"
+                    : "border-transparent bg-[var(--surface-muted)] text-[var(--muted)] disabled:cursor-not-allowed"
+              }`}
+            >
+              <span className="mono text-xs text-[var(--muted)]">{i + 1}</span>
+              <span>{label}</span>
+            </button>
           </li>
         );
       })}
@@ -556,22 +566,22 @@ function StepReviewSections({
   }
 
   return (
-    <Card className="p-6">
+    <Card className="p-4 sm:p-5">
       <h2 className="text-lg font-semibold">Sections agents can navigate</h2>
       <p className="mt-1 text-sm text-[var(--muted)]">
         Section titles help your seller agent guide buyers without revealing unpaid text. Rename, reorder, or exclude any section.
       </p>
 
       {sections.length === 0 ? (
-        <p className="mt-6 rounded-lg bg-[var(--surface-muted)] p-6 text-center text-sm text-[var(--muted)]">
+        <p className="mt-5 rounded-lg border border-dashed border-[var(--line)] bg-white p-5 text-center text-sm text-[var(--muted)]">
           No headers or subheaders detected. Your article will be offered as a single section. Use Header or Subheader to split it.
         </p>
       ) : (
-        <ul className="mt-5 grid gap-3">
+        <ul className="mt-5 overflow-hidden rounded-lg border border-[var(--line)] bg-white divide-y divide-[var(--line)]">
           {sections.map((section, index) => (
             <li
               key={index}
-              className="grid gap-3 rounded-lg bg-[var(--surface-muted)] p-4 sm:grid-cols-[auto_1fr] sm:items-center"
+              className="grid gap-3 p-3.5 sm:grid-cols-[auto_1fr] sm:items-center"
             >
               <div className="flex flex-col">
                 <button type="button" onClick={() => move(index, -1)} disabled={index === 0} className="text-[var(--muted)] hover:text-[var(--ink)] disabled:opacity-30" aria-label="Move up">
@@ -585,7 +595,7 @@ function StepReviewSections({
                 <input
                   value={section.title}
                   onChange={(e) => update(index, { title: e.target.value })}
-                  className="w-full rounded-md bg-transparent py-1 font-medium outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]"
+                  className="w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 font-medium outline-none transition focus:border-[var(--river-line)] focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]"
                 />
                 <div className="mt-1 text-xs text-[var(--muted)]">{section.wordCount.toLocaleString()} words</div>
               </div>
@@ -631,7 +641,7 @@ function StepPricing({
   // Free articles need no price; paid articles need a positive one.
   const valid = isFree || Number(atomicPerWord) > 0;
   return (
-    <Card className="p-6">
+    <Card className="p-4 sm:p-5">
       <h2 className="text-lg font-semibold">Choose access</h2>
       <p className="mt-1 text-sm text-[var(--muted)]">Offer it free to any agent, or charge for exactly the words they read.</p>
 
@@ -652,10 +662,10 @@ function StepPricing({
         />
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
+      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="grid gap-5">
           <Field label="Price per word" hint="Agents pay only for the words they reveal. You can update pricing anytime.">
-            <div className={`flex h-11 items-center gap-2 rounded-lg bg-[var(--surface-muted)] px-3 transition focus-within:bg-white focus-within:ring-2 focus-within:ring-[var(--river-line)] ${isFree ? "opacity-40" : ""}`}>
+            <div className={`flex h-11 items-center gap-2 rounded-lg border border-[var(--line)] bg-white px-3 transition focus-within:border-[var(--river-line)] focus-within:ring-2 focus-within:ring-[var(--river-line)] ${isFree ? "opacity-40" : ""}`}>
               <span className="shrink-0 text-[var(--muted)]">$</span>
               <input
                 value={isFree ? "" : pricePerWord}
@@ -669,18 +679,18 @@ function StepPricing({
           </Field>
         </div>
 
-        <div className="rounded-xl bg-[var(--surface-muted)] p-5">
+        <div className="rounded-lg border border-[var(--line)] bg-white p-4">
           <div className="text-xs font-medium text-[var(--muted)]">
             {isFree ? "Access preview" : "Pricing preview"}
           </div>
           {isFree ? (
-            <dl className="mt-4 grid gap-3 text-sm">
+            <dl className="mt-3 divide-y divide-[var(--line)] text-sm">
               <Row term="Access" value="Free for all agents" />
               <Row term="Price per word" value="$0.00" />
               <Row term="Earnings" value="—" />
             </dl>
           ) : (
-            <dl className="mt-4 grid gap-3 text-sm">
+            <dl className="mt-3 divide-y divide-[var(--line)] text-sm">
               <Row term="Price per word" value={formatUsd(atomicPerWord)} />
               <Row term="Estimated full-article price" value={`${formatUsd(estFullPrice)}`} />
               <Row term="Earnings for 100 words" value={formatUsd(atomicForWords(atomicPerWord, 100))} />
@@ -688,7 +698,7 @@ function StepPricing({
               <Row term="Rubicon platform fee" value="0%" />
             </dl>
           )}
-          <p className="mt-4 rounded-[14px] bg-[var(--surface-muted)] p-3 text-xs leading-5 text-[var(--muted)]">
+          <p className="mt-3 border-t border-[var(--line)] pt-3 text-xs leading-5 text-[var(--muted)]">
             {isFree
               ? "Free articles are delivered in full to any agent and earn nothing. You can switch to paid later."
               : "Estimates use a preview word count. Billing always reflects the exact words an agent reads, measured by Rubicon."}
@@ -728,10 +738,10 @@ function AccessOption({
       aria-checked={selected}
       data-testid={testid}
       onClick={onSelect}
-      className={`grid gap-1 rounded-xl border p-4 text-left transition ${
+      className={`article-access-option grid gap-1 rounded-lg border p-4 text-left transition ${
         selected
           ? "border-[var(--river)] bg-[var(--river-pale)]"
-          : "border-[var(--line)] bg-[var(--surface-muted)] hover:border-[var(--river-line)]"
+          : "border-[var(--line)] bg-white hover:border-[var(--river-line)]"
       }`}
     >
       <span className="text-sm font-semibold">{title}</span>
@@ -787,13 +797,13 @@ function StepPublish({
   // nothing, so a missing/unverified wallet never blocks them.
   const walletBlocksPublish = !isFree && !walletVerified;
   return (
-    <Card className="p-6">
+    <Card className="p-4 sm:p-5">
       <h2 className="text-lg font-semibold">Review and publish</h2>
       <p className="mt-1 text-sm text-[var(--muted)]">Confirm the details below. You can save a draft or publish it live to agents.</p>
 
       {safetyNotice && <div className="mt-5">{safetyNotice}</div>}
 
-      <dl className="mt-5 grid gap-3 rounded-xl bg-[var(--surface-muted)] p-5 text-sm">
+      <dl className="mt-5 divide-y divide-[var(--line)] rounded-lg border border-[var(--line)] bg-white px-4 text-sm">
         <Row term="Article title" value={title || "Untitled"} />
         <Row term="Access" value={isFree ? "Free for all agents" : "Paid per word"} />
         <Row term="Word count" value={includedWords.toLocaleString()} />
@@ -869,9 +879,9 @@ function StepPublish({
 
 function Row({ term, value, hint }: { term: string; value: React.ReactNode; hint?: string }) {
   return (
-    <div className="grid grid-cols-[1fr_auto] items-baseline gap-4 rounded-[14px] px-3 py-2 even:bg-[var(--surface-muted)]">
-      <dt className="text-[var(--muted)]">{term}</dt>
-      <dd className="text-right font-medium">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-4 py-2.5">
+      <dt className="min-w-0 text-[var(--muted)]">{term}</dt>
+      <dd className="min-w-0 break-words text-right font-medium">
         {value}
         {hint && <span className="ml-2 text-xs font-normal text-[var(--muted)]">{hint}</span>}
       </dd>

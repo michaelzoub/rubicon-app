@@ -20,6 +20,7 @@ test.describe("dashboard UI reliability", () => {
 
   for (const viewport of [
     { name: "desktop", width: 1440, height: 900 },
+    { name: "tablet", width: 834, height: 1112 },
     { name: "mobile", width: 390, height: 844 },
   ]) {
     test(`overview stays usable at ${viewport.name} width`, async ({ page }) => {
@@ -31,6 +32,32 @@ test.describe("dashboard UI reliability", () => {
       await expect(page.getByRole("heading", { name: "Top articles" })).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow).toBeLessThanOrEqual(1);
+    });
+  }
+
+  for (const viewport of [
+    { name: "desktop", width: 1440, height: 900 },
+    { name: "tablet", width: 834, height: 1112 },
+    { name: "mobile", width: 390, height: 844 },
+  ]) {
+    test(`export dialog fits its content at ${viewport.name} width`, async ({ page }) => {
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto("/dashboard-preview");
+
+      await page.getByRole("button", { name: "Export card" }).click();
+      const dialog = page.getByRole("dialog", { name: "Export card" });
+      await expect(dialog).toBeVisible();
+
+      const box = await dialog.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width);
+      expect(box!.y).toBeGreaterThanOrEqual(0);
+      expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
+
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow).toBeLessThanOrEqual(1);
+      await expect(dialog.getByRole("button", { name: "Copy PNG" })).toBeVisible();
     });
   }
 

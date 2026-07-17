@@ -62,7 +62,7 @@ export default function ArticlesPage() {
   }
 
   return (
-    <div className="grid gap-6">
+    <div className="dashboard-fade-in grid gap-4">
       <PageHeader
         title="Your articles"
         action={
@@ -116,7 +116,7 @@ export default function ArticlesPage() {
             return (
             <li
               key={article.id}
-              className="flex flex-col gap-4 px-4 py-4 transition-colors hover:bg-[var(--surface-muted)] sm:px-5 lg:flex-row lg:items-center lg:justify-between"
+              className="flex flex-col gap-3 px-4 py-3.5 transition-colors hover:bg-[var(--surface-muted)] sm:px-5 lg:flex-row lg:items-center lg:justify-between"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -125,14 +125,14 @@ export default function ArticlesPage() {
                     // Post-go-live landing page: agents finishing onboarding
                     // read the live article's URL from this link.
                     {...(article.state === "live" ? { "data-testid": "live-url" } : {})}
-                    className="min-w-0 break-words text-lg font-semibold [overflow-wrap:anywhere] hover:underline"
+                    className="min-w-0 break-words text-base font-semibold tracking-[-0.01em] [overflow-wrap:anywhere] hover:underline"
                   >
                     {article.title}
                   </Link>
                   <ArticleStatePill state={article.state} />
                   {stolen && <SafetyBadge />}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-[var(--muted)]">
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--muted)]">
                   <span>{formatUsd(article.pricePerWordAtomic)} / word</span>
                   {metric ? (
                     <>

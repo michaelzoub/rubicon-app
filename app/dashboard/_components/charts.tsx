@@ -173,7 +173,8 @@ export function TrendChart({
             dot={false}
             activeDot={{ r: 3, fill: "var(--ink)", stroke: "white", strokeWidth: 1.5 }}
             isAnimationActive={!reduce && animateOnFirstData}
-            animationDuration={240}
+            animationBegin={reduce ? 0 : 120}
+            animationDuration={360}
             animationEasing="ease-out"
           />
         </LineChart>
@@ -245,7 +246,7 @@ export function Donut({
                   strokeDashoffset={dashOffset}
                   initial={reduce ? false : { strokeDasharray: `0 ${circumference}` }}
                   animate={{ strokeDasharray: `${dash} ${gap}`, opacity: dim ? 0.35 : 1 }}
-                  transition={{ duration: reduce ? 0 : 0.18, delay: reduce ? 0 : i * 0.025, ease: [0.23, 1, 0.32, 1] }}
+                  transition={{ duration: reduce ? 0 : 0.32, delay: reduce ? 0 : 0.08 + i * 0.04, ease: [0.23, 1, 0.32, 1] }}
                   onMouseEnter={() => setActive(i)}
                   onMouseLeave={() => setActive((cur) => (cur === i ? null : cur))}
                   onPointerMove={() => setActive(i)}
@@ -361,7 +362,8 @@ export function Sparkline({
             dot={false}
             activeDot={{ r: 3, fill: color, stroke: "white", strokeWidth: 1.5 }}
             isAnimationActive={!reduce && animateOnFirstData}
-            animationDuration={220}
+            animationBegin={reduce ? 0 : 100}
+            animationDuration={320}
             animationEasing="ease-out"
           />
         </LineChart>

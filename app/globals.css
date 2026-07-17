@@ -5050,13 +5050,13 @@ a {
   container-type: inline-size;
   min-height: calc(100vh - 4rem);
   margin: -1.25rem -1rem -1.25rem;
-  background: #ffffff;
+  background: var(--canvas, #fcfcfc);
 }
 
 .substack-compose {
   min-height: calc(100vh - 4rem);
-  background: #ffffff;
-  color: #303030;
+  background: var(--canvas, #fcfcfc);
+  color: var(--ink, #303030);
 }
 
 .substack-compose-topbar {
@@ -5067,9 +5067,12 @@ a {
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 1rem;
-  min-height: 4.5rem;
-  padding: 0 1.25rem;
-  background: rgba(255, 255, 255, 0.96);
+  min-height: 3.75rem;
+  padding: 0 1rem;
+  border-bottom: 1px solid var(--line, rgba(18, 18, 22, 0.08));
+  background: rgba(252, 252, 252, 0.88);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  backdrop-filter: blur(16px) saturate(150%);
 }
 
 .substack-compose-back {
@@ -5118,10 +5121,10 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 2.75rem;
+  min-height: 2rem;
   border: 0;
   border-radius: 8px;
-  padding: 0 1.35rem;
+  padding: 0 0.8rem;
   font-weight: 750;
   transition:
     background-color 140ms var(--ease-out),
@@ -5167,7 +5170,37 @@ a {
 .substack-compose-main {
   width: min(100%, 51rem);
   margin: 0 auto;
-  padding: clamp(2.5rem, 7vw, 5rem) 1.25rem 6rem;
+  padding: clamp(2rem, 5vw, 3.5rem) 1.25rem 5rem;
+  animation: dashboard-fade-in 320ms var(--dashboard-ease-out, ease-out) both;
+}
+
+.article-stepper button {
+  min-height: 2rem;
+  box-shadow: none;
+  border: 1px solid var(--line) !important;
+}
+.article-stepper button[aria-current="step"] {
+  border-color: var(--ink) !important;
+}
+.article-stepper button:disabled {
+  border-color: transparent !important;
+}
+.dashboard-theme .article-access-option {
+  border: 1px solid var(--line) !important;
+  background: #fff;
+}
+.dashboard-theme .article-access-option[aria-checked="true"] {
+  border-color: var(--river) !important;
+  background: var(--river-pale);
+}
+
+@media (max-width: 520px) {
+  .article-stepper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .article-stepper button { width: 100%; justify-content: flex-start; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .substack-compose-main { animation: none; }
 }
 
 .substack-title-input,
@@ -6203,6 +6236,24 @@ a {
 .dashboard-theme .export-copy-button.is-copied {
   background: #16794c;
   color: #fff;
+}
+.dashboard-theme .export-copy-button {
+  outline: 1px solid rgba(18, 18, 22, 0.10);
+  outline-offset: -1px;
+}
+.dashboard-theme .export-card-dialog .button {
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
+}
+.dashboard-theme .export-card-dialog .dashboard-icon-button {
+  width: 1.75rem;
+  height: 1.75rem;
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+}
+.dashboard-theme .button {
+  min-height: 1.75rem;
+  padding-block: 0.2rem;
 }
 
 @media (max-width: 1023px) {
