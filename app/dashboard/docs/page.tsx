@@ -15,6 +15,7 @@ import {
   Terminal,
 } from "lucide-react";
 import Link from "next/link";
+import { gatewayUrlForEnvironment } from "@/lib/rubicon/gateway-environment";
 
 const npmBase = "https://www.npmjs.com/package";
 const githubUrl = "https://github.com/michaelzoub/rubicon";
@@ -69,6 +70,7 @@ function PackageCard({
 }
 
 export default function DashboardDocsPage() {
+  const gatewayUrl = gatewayUrlForEnvironment();
   return (
     <div className="dashboard-docs">
       <div className="docs-mobile-nav" aria-label="Documentation sections">
@@ -98,7 +100,7 @@ export default function DashboardDocsPage() {
           <CodeBlock label="TypeScript">{`import Rubicon from "@rubicon-caliga/agent-sdk";
 
 const rubicon = new Rubicon({
-  baseUrl: process.env.RUBICON_GATEWAY_URL,
+  baseUrl: ${JSON.stringify(gatewayUrl ?? "https://your-gateway.example.com")},
   authorization: \`Bearer \${process.env.RUBICON_AGENT_API_KEY}\`,
 });
 
@@ -212,7 +214,7 @@ const usage = usageForWords({
 } from "@rubicon-caliga/agent-sdk";
 
 const rubicon = new Rubicon({
-  baseUrl: process.env.RUBICON_GATEWAY_URL,
+  baseUrl: ${JSON.stringify(gatewayUrl ?? "https://your-gateway.example.com")},
   paymentEngine: new CircleCliGatewayPaymentEngine({
     agentWalletAddress: process.env.CIRCLE_AGENT_WALLET_ADDRESS as \`0x\${string}\`,
     chain: "ARC-TESTNET",
