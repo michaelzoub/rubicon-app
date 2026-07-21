@@ -27,6 +27,7 @@ import { explorerAddressUrl, formatBalance, useNativeBalance } from "@/lib/oncha
 import { WithdrawDialog } from "./_components/withdraw-dialog";
 import { DashboardDialog } from "./_components/overlays";
 import { buildEarningsDonutSlices, CountUp, Donut, InsightTile, Reveal, type DonutSlice, type TrendBar } from "./_components/charts";
+import { parseAnalyticsDay } from "@/lib/analytics/date";
 import {
   ContentProtectionPolicy,
   DashboardOverviewContent,
@@ -1208,9 +1209,9 @@ function buildWeeklyDeltas(activity: AnalyticsDailyMetric[]): WeeklyDeltas {
   const cur = { earnings: 0, words: 0, reads: 0 };
   const prev = { earnings: 0, words: 0, reads: 0 };
   for (const row of activity) {
-    const t = new Date(`${row.date}T00:00:00.000Z`).getTime();
-    if (Number.isNaN(t)) continue;
-    const age = now - t;
+    const date = parseAnalyticsDay(row.date);
+    if (!date) continue;
+    const age = now - date.getTime();
     const bucket = age < week ? cur : age < 2 * week ? prev : null;
     if (!bucket) continue;
     bucket.earnings += atomicToUsd(row.settledCreatorAmountAtomic);
@@ -1259,7 +1260,7 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-/** Maps the server-aggregated UTC daily series into the trailing trend chart. */
+/** Maps the server's date-only daily series into the trailing trend chart. */
 function buildTrend(activity: AnalyticsDailyMetric[], metric: "earnings" | "words", days = 14): TrendBar[] {
   const buckets = new Map<string, { earnings: number; words: number; date: Date }>();
   const today = new Date();
@@ -1269,8 +1270,8 @@ function buildTrend(activity: AnalyticsDailyMetric[], metric: "earnings" | "word
     buckets.set(dayKey(d), { earnings: 0, words: 0, date: d });
   }
   for (const row of activity) {
-    const parsed = new Date(`${row.date}T00:00:00.000Z`);
-    if (Number.isNaN(parsed.getTime())) continue;
+    const parsed = parseAnalyticsDay(row.date);
+    if (!parsed) continue;
     const bucket = buckets.get(dayKey(parsed));
     if (!bucket) continue;
     bucket.earnings += atomicToUsd(row.settledCreatorAmountAtomic);

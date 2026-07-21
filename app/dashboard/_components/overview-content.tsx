@@ -1060,6 +1060,8 @@ async function renderExportPng({
   const PAPER = "#101114";
   const MUTED = "rgba(255,255,255,0.72)";
   const QUIET = "rgba(255,255,255,0.5)";
+  const POSITIVE = "#8BE3B1";
+  const NEGATIVE = "#FFAAA3";
 
   // The dashboard's own faces (Hanken Grotesk / JetBrains Mono) carry into the
   // artifact; wait for them so the canvas doesn't rasterize a fallback.
@@ -1129,7 +1131,7 @@ async function renderExportPng({
   const rangeEnd = trendBars[trendBars.length - 1]?.label ?? "Today";
   monoLabel(`${rangeStart} — ${rangeEnd}`, RIGHT, 100, { align: "right", color: QUIET, size: 12, tracking: "1.8px" });
 
-  monoLabel("TOTAL EARNINGS", MARGIN, 218, { color: MUTED, size: 14 });
+  monoLabel("Total earnings", MARGIN, 218, { color: MUTED, size: 14 });
   setSpacing("-4px");
   let amountSize = 176;
   ctx.font = `800 ${amountSize}px ${SANS}`;
@@ -1142,14 +1144,14 @@ async function renderExportPng({
   setSpacing("0px");
 
   const delta = computeTrendDelta(trendBars.map((bar) => bar.value));
-  monoLabel(`${delta.label} VS PREVIOUS PERIOD`, MARGIN, 454, { color: delta.up ? INK : MUTED, size: 14 });
+  monoLabel(`${delta.label} vs previous period`, MARGIN, 454, { color: delta.up ? POSITIVE : NEGATIVE, size: 14 });
 
-  monoLabel("EARNINGS ACTIVITY", MARGIN, 548, { color: MUTED, size: 13 });
+  monoLabel("Earnings activity", MARGIN, 548, { color: MUTED, size: 13 });
   drawEarningsLine(ctx, MARGIN, 584, RIGHT - MARGIN, 180, trendBars, { ink: INK, fill: "rgba(255,255,255,0.16)" });
 
-  monoLabel("AGENT READS", MARGIN, 824, { color: QUIET, size: 12 });
-  monoLabel("PAID WORDS", 326, 824, { color: QUIET, size: 12 });
-  monoLabel("TOP PAID ARTICLE", 570, 824, { color: QUIET, size: 12 });
+  monoLabel("Agent reads", MARGIN, 824, { color: QUIET, size: 12 });
+  monoLabel("Paid words", 326, 824, { color: QUIET, size: 12 });
+  monoLabel("Top paid article", 570, 824, { color: QUIET, size: 12 });
   ctx.fillStyle = INK;
   ctx.font = `700 36px ${SANS}`;
   ctx.fillText(reads, MARGIN, 872);

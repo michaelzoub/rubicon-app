@@ -8,7 +8,8 @@ description: Concise orientation map for important Rubicon app routes, architect
 ## App entrypoints
 
 - `app/page.tsx`: public landing page.
-- `app/dashboard/layout.tsx` and `app/dashboard/_components/shell.tsx`: authenticated creator dashboard shell.
+- `app/dashboard/layout.tsx` and `app/dashboard/_components/shell.tsx`: authenticated creator dashboard shell. `/dashboard/docs` is intentionally exempted from the dashboard chrome so its dedicated documentation shell can provide reader-focused navigation.
+- `app/dashboard/docs/page.tsx`: dedicated, responsive developer documentation experience at the preserved `/dashboard/docs` route, with Cmd/Ctrl+K section search, sticky navigation, code copying, and mobile navigation drawer.
 - `app/dashboard/_components/overlays.tsx` and `app/dashboard/dashboard.css`: shared dashboard portal, dialog stack/focus/scroll behavior, motion tokens, typography tokens, and documented z-index scale. See `UI_CONVENTIONS.md`.
 - `app/dashboard/_components/substack-onboarding-dialog.tsx`: first-run platform selection plus Substack and Artemis onboarding/pricing flows; renders through a body portal and owns document scroll while open.
 - `app/dashboard/articles/new/page.tsx`: new article and URL-import review/publish flow.

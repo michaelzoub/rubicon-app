@@ -4,9 +4,14 @@ test.describe("dashboard UI reliability", () => {
   test("payout replaces itself with withdraw and keeps a single backdrop", async ({ page }) => {
     await page.goto("/dashboard-preview");
 
+    const agentReadsMetric = page.locator('[data-dashboard-metric="Agent reads"]');
+    await expect(agentReadsMetric).toContainText("146");
+    await expect(agentReadsMetric).toContainText("+11%");
+
     const payoutTrigger = page.getByRole("button", { name: "Payout connection" });
     await payoutTrigger.click();
     await expect(page.getByRole("dialog", { name: "Payout connection" })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: "Payout connection" }).getByText("41.27")).toBeVisible();
 
     await page.getByRole("button", { name: "Withdraw" }).click();
     await expect(page.getByRole("dialog", { name: "Withdraw USDC" })).toBeVisible();

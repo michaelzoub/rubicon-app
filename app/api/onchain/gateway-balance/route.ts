@@ -1,4 +1,4 @@
-import { createPublicClient, http, isAddress, parseUnits } from "viem";
+import { createPublicClient, fallback, http, isAddress, parseUnits } from "viem";
 import { NextResponse } from "next/server";
 import { ACTIVE_CHAIN } from "@/lib/chain";
 import {
@@ -16,7 +16,13 @@ export const runtime = "nodejs";
 // unauthenticated, like /v1/x402/transfers. Default to testnet.
 const GATEWAY_API_URL = process.env.CIRCLE_GATEWAY_API_URL || "https://gateway-api-testnet.circle.com";
 
-const transport = http(process.env.ARC_RPC_URL || undefined);
+// A configured RPC is preferred, but it must not make gateway balances
+// unavailable when a preview environment has an expired endpoint.
+const rpcUrls = [
+  ...(process.env.ARC_RPC_URL ? [process.env.ARC_RPC_URL] : []),
+  ...ACTIVE_CHAIN.rpcUrls.default.http,
+];
+const transport = fallback([...new Set(rpcUrls)].map((url) => http(url)), { rank: false });
 const publicClient = createPublicClient({ chain: ACTIVE_CHAIN, transport });
 
 async function fetchAvailableAtomic(depositor: `0x${string}`): Promise<bigint | null> {

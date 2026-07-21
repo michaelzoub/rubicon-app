@@ -77,6 +77,11 @@ function AuthGate({ children }: { children: ReactNode }) {
 
   if (!authenticated) return <WriterAuthScreen onLogin={login} />;
 
+  // Developer docs intentionally use their own reading-focused chrome. Keeping
+  // this decision here preserves the existing /dashboard/docs route while
+  // preventing the creator dashboard sidebar from leaking into documentation.
+  if (pathname.startsWith("/dashboard/docs")) return <>{children}</>;
+
   return <Layout>{children}</Layout>;
 }
 
