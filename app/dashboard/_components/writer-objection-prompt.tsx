@@ -1,9 +1,9 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import posthog from "posthog-js";
 import { useCallback, useEffect, useState } from "react";
 import { OBJECTION_OPTIONS, type WriterObjection, writerHomeUrl } from "./writer-objection";
+import { DashboardDialog } from "./overlays";
 
 const eventContext = {
   user_type: "writer",
@@ -27,7 +27,6 @@ export function trackWriterExitConfirmed(objection?: WriterObjection) {
 }
 
 export function WriterObjectionDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const reduceMotion = useReducedMotion();
   const [objection, setObjection] = useState<WriterObjection | null>(null);
 
   useEffect(() => {
@@ -39,43 +38,13 @@ export function WriterObjectionDialog({ open, onClose }: { open: boolean; onClos
     onClose();
   }, [onClose]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") cancel();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [cancel, open]);
-
   function goHome() {
     trackWriterExitConfirmed(objection ?? undefined);
     window.location.assign(writerHomeUrl());
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/35 p-5"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0.01 : 0.2 }}
-          onClick={cancel}
-          role="presentation"
-        >
-          <motion.section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="writer-objection-title"
-            className="w-full max-w-md rounded-lg border border-black/[0.12] bg-white p-6 text-left"
-            initial={{ opacity: 0, y: 12, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: reduceMotion ? 0.01 : 0.3, ease: [0.23, 1, 0.32, 1] }}
-            onClick={(event) => event.stopPropagation()}
-          >
+    <DashboardDialog open={open} onClose={cancel} labelledBy="writer-objection-title" className="max-w-md p-6 text-left">
             <h2 id="writer-objection-title" className="text-balance text-lg font-semibold tracking-[-0.01em] text-[#171717]">
               Why you no list article?
             </h2>
@@ -106,13 +75,10 @@ export function WriterObjectionDialog({ open, onClose }: { open: boolean; onClos
               <button type="button" onClick={goHome} className="rounded-md px-3.5 py-2 text-sm font-medium text-[#73757c] hover:text-[#171717] active:scale-[0.96] transition-transform">
                 Go home
               </button>
-              <button type="button" onClick={cancel} className="button button-primary text-sm active:scale-[0.96] transition-transform">
+              <button type="button" onClick={cancel} className="button button-primary text-sm">
                 Keep listing
               </button>
             </div>
-          </motion.section>
-        </motion.div>
-      )}
-    </AnimatePresence>
+    </DashboardDialog>
   );
 }

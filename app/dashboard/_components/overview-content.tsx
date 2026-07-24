@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   ArrowRight,
   Check,
@@ -11,28 +11,28 @@ import {
   Download,
   ExternalLink,
   FileText,
-  Link2,
   ImagePlus,
   RefreshCw,
   ShieldCheck,
   Wallet2,
   X,
 } from "lucide-react";
-import type { ArticleState, PaymentStatus } from "@/lib/rubicon/types";
+import type { ArticleState } from "@/lib/rubicon/types";
+import type { AnalyticsSettlementStatus } from "@/lib/analytics/types";
 import { formatUsdDisplay } from "@/lib/rubicon/pricing";
 import { RubiconBrand } from "../../_components/rubicon-brand";
-import { CountUp, Donut, InsightTile, Reveal, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
+import { ChartEmptyState, CountUp, Donut, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
+import { DashboardDialog } from "./overlays";
+import { SuccessCelebration, useSuccessCelebration } from "./success-celebration";
 import {
-  ArticleStatePill,
   Card,
   CardHeader,
   EmptyState,
+  MetricTrend,
   PageHeader,
-  PaymentStatusPill,
   RefreshDots,
   Skeleton,
   shortWallet,
-  StatTile,
 } from "./ui";
 
 export interface DashboardOverviewStat {
@@ -40,6 +40,7 @@ export interface DashboardOverviewStat {
   value: number;
   format: (value: number) => string;
   deltaPct?: number | null;
+  context?: string;
   sparklineValues?: number[];
   sparklineLabels?: string[];
   sparklineMetricLabel?: string;
@@ -49,15 +50,15 @@ export interface DashboardOverviewStat {
 export interface DashboardOverviewPaymentRow {
   id: string;
   title: string;
-  meta: string;
+  occurredAt: string;
   amount: string;
-  status: PaymentStatus;
+  status: AnalyticsSettlementStatus;
 }
 
 export interface DashboardOverviewArticleRow {
   id: string;
   title: string;
-  meta: string;
+  wordsRead: number;
   earnings: string;
   state: ArticleState;
   href?: string;
@@ -89,25 +90,19 @@ export interface DashboardOverviewExport {
   trendBars: TrendBar[];
 }
 
-export interface DashboardActivityDay {
-  date: string;
-  count: number;
-}
-
 export interface DashboardOverviewProps {
   greeting: string;
   exportData?: DashboardOverviewExport;
-  activityCalendar: DashboardActivityDay[];
   stats: DashboardOverviewStat[];
   trendBars: TrendBar[];
   topArticles?: Array<{
     id?: string;
     title: string;
     earnings: string;
+    value?: number;
     href?: string;
   }>;
   breakdown?: {
-    avgPerRead: number;
     totalEarned: string;
     slices: DonutSlice[];
   } | null;
@@ -120,7 +115,6 @@ export interface DashboardOverviewProps {
 }
 
 export function DashboardOverviewContent({
-  greeting,
   exportData,
   stats,
   trendBars,
@@ -131,93 +125,107 @@ export function DashboardOverviewContent({
   wallet,
   refreshing = false,
 }: DashboardOverviewProps) {
+  const hasTopArticles = topArticles.length > 0;
+  const hasBreakdown = Boolean(breakdown && breakdown.slices.length > 0);
+  const [payoutOpen, setPayoutOpen] = useState(false);
+
   return (
-    <div className="grid gap-4">
+    <div className="dashboard-fade-in grid gap-3 sm:gap-4">
       <PageHeader
         title="Overview"
         action={
           <div className="flex flex-wrap items-center gap-2">
             {refreshing && <RefreshDots />}
+            <button type="button" onClick={() => setPayoutOpen(true)} className="button button-secondary text-sm">
+              <Wallet2 size={15} aria-hidden="true" /> Payout connection
+            </button>
             <ContentProtectionPolicy />
             {exportData && <ExportButton {...exportData} />}
           </div>
         }
       />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
-        <div className="grid min-w-0 gap-3">
-          <div className="grid items-stretch gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {stats.map((stat, index) => (
-              <Reveal
-                key={stat.label}
-                delay={index * 0.035}
-                className="relative h-full hover:z-50 focus-within:z-50"
-              >
-                <StatTile
-                  label={stat.label}
-                  value={<CountUp value={stat.value} format={stat.format} />}
-                  hint={stat.deltaPct !== undefined ? <DeltaHint pct={stat.deltaPct} /> : undefined}
-                  sparkline={stat.sparklineValues && stat.sparklineValues.length > 1 ? (
-                    <Sparkline
-                      values={stat.sparklineValues}
-                      labels={stat.sparklineLabels}
-                      metricLabel={stat.sparklineMetricLabel ?? stat.label}
-                      details={stat.sparklineDetails}
-                      formatValue={stat.format}
-                      height={32}
-                    />
-                  ) : undefined}
-                />
-              </Reveal>
-            ))}
+      <div className="dashboard-tooltip-layer relative">
+        <UnifiedMetricsPanel stats={stats} />
+      </div>
+
+      <div className="grid min-w-0 gap-3 sm:gap-4">
+        <div className={`grid min-w-0 gap-3 ${hasTopArticles ? "lg:grid-cols-[minmax(0,2.125fr)_minmax(18rem,1fr)]" : ""}`}>
+          <div className="h-full">
+            <MoneyActivityChart bars={exportData?.trendBars ?? trendBars} />
           </div>
 
-          <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(360px,1fr)]">
-            <Reveal delay={0.08} className="relative h-full hover:z-50 focus-within:z-50">
-              <MoneyActivityChart bars={exportData?.trendBars ?? trendBars} />
-            </Reveal>
-
-            {topArticles.length > 0 && (
-              <Reveal delay={0.1} className="h-full">
-                <TopArticlesRanking articles={topArticles} />
-              </Reveal>
-            )}
-          </div>
-
-          {breakdown && breakdown.slices.length > 0 && (
-            <Reveal delay={0.12}>
-              <Card className="p-3.5">
-                <div>
-                  <h2 className="text-base font-semibold">Earnings breakdown</h2>
-                </div>
-                <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)]">
-                  <InsightTile value={<CountUp value={breakdown.avgPerRead} format={formatUsdDisplay} />} caption="Average earned per agent read" />
-                  <div className="flex min-w-0 items-center overflow-hidden rounded-lg border border-[var(--line)] bg-white p-3.5">
-                    <Donut slices={breakdown.slices} centerValue={breakdown.totalEarned} centerLabel="Total earned" showCenter={false} size={142} stroke={18} />
-                  </div>
-                </div>
-              </Card>
-            </Reveal>
+          {hasTopArticles && (
+            <div className="h-full">
+              <TopArticlesPodium articles={topArticles} />
+            </div>
           )}
-
-          <div className="grid gap-3 lg:grid-cols-2">
-            <PaymentActivityRows rows={paymentRows} />
-            <ArticleRows rows={articleRows} />
-          </div>
         </div>
 
-        <aside className="grid h-fit gap-3 xl:sticky xl:top-5">
-          <WalletCard wallet={wallet} />
-        </aside>
+        {hasBreakdown && (
+          <div className="h-full">
+            <EarningsBreakdown breakdown={breakdown!} />
+          </div>
+        )}
+
+        <div className="grid items-start gap-3 lg:grid-cols-2">
+          <PaymentActivityRows rows={paymentRows} />
+          <ArticleRows rows={articleRows} />
+        </div>
       </div>
+
+      <PayoutConnectionDialog open={payoutOpen} onClose={() => setPayoutOpen(false)} wallet={wallet} />
     </div>
   );
 }
 
-/** A deliberately simple loading shimmer — a few calm placeholder blocks that
-    echo the dashboard's shape (stat row, two content cards, two lists, wallet)
-    without trying to pixel-match it. No rigid min-width tracks, so it can't
-    overflow, and generous spacing keeps it from feeling cramped. */
+function UnifiedMetricsPanel({ stats }: { stats: DashboardOverviewStat[] }) {
+  return (
+    <Card className="grid min-h-[126px] overflow-visible sm:grid-cols-2 xl:grid-cols-4">
+      {stats.map((stat, index) => (
+        <div
+          key={stat.label}
+          className={`dashboard-metric-cell relative flex min-w-0 flex-col justify-between px-4 py-3.5 sm:px-5 ${metricDividerClass(index)}`}
+          data-dashboard-metric={stat.label}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <span className="text-[0.72rem] font-medium text-[var(--muted)]">{stat.label}</span>
+            {stat.deltaPct !== undefined && <MetricTrend value={stat.deltaPct} />}
+          </div>
+          <div className="mt-3 text-[1.45rem] font-semibold leading-none tracking-[-0.035em] tabular-nums">
+            <CountUp value={stat.value} format={stat.format} />
+          </div>
+          <div className="mt-3 flex min-h-4 items-end justify-between gap-2">
+            {stat.context && <span className="text-[0.68rem] leading-4 text-[var(--quiet)]">{stat.context}</span>}
+            {stat.sparklineValues && stat.sparklineValues.length > 1 && (
+              <div className="ml-auto w-16 opacity-55">
+                <Sparkline
+                  values={stat.sparklineValues}
+                  labels={stat.sparklineLabels}
+                  metricLabel={stat.sparklineMetricLabel ?? stat.label}
+                  details={stat.sparklineDetails}
+                  formatValue={stat.format}
+                  height={20}
+                  strokeWidth={1}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function metricDividerClass(index: number) {
+  if (index === 0) return "";
+  if (index === 1) return "border-t border-[var(--line)] sm:border-l sm:border-t-0";
+  if (index === 2) return "border-t border-[var(--line)] xl:border-l xl:border-t-0";
+  return "border-t border-[var(--line)] sm:border-l xl:border-l xl:border-t-0";
+}
+
+/** A deliberately simple loading shimmer that follows the loaded overview's
+    major geometry without trying to pixel-match every data state. */
 export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean }) {
   return (
     <div className="grid gap-4">
@@ -232,112 +240,222 @@ export function OverviewSkeleton({ refreshing = false }: { refreshing?: boolean 
         }
       />
 
-      <div className="grid min-w-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,300px)]">
-        {/* main column */}
-        <div className="grid min-w-0 gap-3">
-          {/* stat tiles */}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i} className="grid min-h-[108px] content-between gap-6 p-4">
-                <Skeleton className="h-3.5 w-20" />
-                <Skeleton className="h-7 w-28" />
-              </Card>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i} className="grid min-h-[108px] content-between gap-6 p-4">
+            <Skeleton className="h-3.5 w-20" />
+            <Skeleton className="h-7 w-28" />
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(19rem,1fr)]">
+        <Card className="min-h-[20rem] p-4">
+          <Skeleton className="h-4 w-36" />
+          <div className="mt-6 flex h-[12rem] items-end gap-2">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <Skeleton key={i} className="flex-1" rounded="rounded" />
             ))}
           </div>
-
-          {/* chart + secondary */}
-          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-            <Card className="min-h-[13rem] p-4">
-              <Skeleton className="h-4 w-36" />
-              <div className="mt-6 flex h-[9rem] items-end gap-2">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <Skeleton key={i} className="flex-1" rounded="rounded" />
-                ))}
+        </Card>
+        <Card className="min-h-[20rem] p-4 sm:p-5">
+          <Skeleton className="h-4 w-28" />
+          <div className="mt-5 grid grid-cols-3 items-end gap-2 sm:gap-3">
+            {["h-20", "h-28", "h-16"].map((height, i) => (
+              <div key={i} className="grid gap-3">
+                <Skeleton className={`${height} w-full`} rounded="rounded-t-lg" />
+                <Skeleton className="mx-auto h-3 w-4/5" />
+                <Skeleton className="mx-auto h-2.5 w-3/5" />
               </div>
-            </Card>
-            <Card className="min-h-[13rem] p-4">
-              <Skeleton className="h-4 w-28" />
-              <div className="mt-6 grid gap-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" rounded="rounded-lg" />
-                ))}
-              </div>
-            </Card>
-          </div>
-
-          {/* list cards */}
-          <div className="grid min-w-0 gap-3 lg:grid-cols-2">
-            {[0, 1].map((card) => (
-              <Card key={card} className="p-4">
-                <Skeleton className="h-4 w-40" />
-                <div className="mt-5 grid gap-4">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="flex items-center justify-between gap-4">
-                      <Skeleton className="h-3.5 w-40" />
-                      <Skeleton className="h-3.5 w-12" />
-                    </div>
-                  ))}
-                </div>
-              </Card>
             ))}
           </div>
+        </Card>
+      </div>
+
+      <Card className="min-h-[12rem] p-4">
+        <Skeleton className="h-4 w-36" />
+        <div className="mt-6 grid grid-cols-[minmax(0,1fr)_7rem] items-center gap-6">
+          <Skeleton className="h-24 w-full" rounded="rounded-lg" />
+          <Skeleton className="aspect-square w-full" rounded="rounded-full" />
         </div>
+      </Card>
 
-        {/* wallet sidebar */}
-        <aside className="min-w-0">
-          <Card className="p-4">
-            <Skeleton className="h-4 w-32" />
-            <div className="mt-5 grid gap-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" rounded="rounded-lg" />
+      <Card className="min-h-[10rem] p-4">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="mt-5 h-20 w-full" rounded="rounded-lg" />
+      </Card>
+
+      <div className="grid min-w-0 gap-3 lg:grid-cols-2">
+        {[0, 1].map((card) => (
+          <Card key={card} className="p-4">
+            <Skeleton className="h-4 w-40" />
+            <div className="mt-5 grid gap-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between gap-4">
+                  <Skeleton className="h-3.5 w-40" />
+                  <Skeleton className="h-3.5 w-12" />
+                </div>
               ))}
             </div>
           </Card>
-        </aside>
+        ))}
       </div>
     </div>
   );
 }
 
-function TopArticlesRanking({ articles }: { articles: NonNullable<DashboardOverviewProps["topArticles"]> }) {
+const PODIUM_STYLES = [
+  {
+    rank: 1,
+    top: "#fff0c4",
+    front: "#f7d77e",
+    side: "#dfac43",
+    badge: "#9c660d",
+    line: "#ecc767",
+    height: "4.25rem",
+  },
+  {
+    rank: 2,
+    top: "#ffffff",
+    front: "#f1f2f4",
+    side: "#d5d8dc",
+    badge: "#969aa2",
+    line: "#e4e6e9",
+    height: "4.25rem",
+  },
+  {
+    rank: 3,
+    top: "#fff0e4",
+    front: "#efcba9",
+    side: "#d79c68",
+    badge: "#b67534",
+    line: "#e9c8ad",
+    height: "4.25rem",
+  },
+] as const;
+
+function TopArticlesPodium({ articles }: { articles: NonNullable<DashboardOverviewProps["topArticles"]> }) {
+  const ranked = articles.slice(0, 6);
+  const leaders = ranked.slice(0, 3);
+  const runners = ranked.slice(3, 6);
+  const podiumOrder = leaders.length === 3 ? [leaders[1], leaders[0], leaders[2]] : leaders.length === 2 ? [leaders[1], leaders[0]] : leaders;
+  const podiumGridClass = leaders.length === 1
+    ? "mx-auto w-full max-w-32 grid-cols-1"
+    : leaders.length === 2
+      ? "mx-auto w-full max-w-64 grid-cols-2"
+      : "grid-cols-3";
+  const total = ranked.reduce((sum, article) => sum + (article.value ?? 0), 0);
+
   return (
-    <Card className="flex h-full min-h-[13rem] flex-col overflow-hidden p-3.5">
+    <Card className="flex h-full min-h-[20rem] flex-col overflow-hidden p-4 sm:p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-semibold">Top articles</h2>
-        <span className="text-[0.68rem] text-[var(--muted)]">Ranked by earnings</span>
+        <h2 className="dashboard-panel-title">Top articles</h2>
+        <span className="dashboard-meta">Ranked by earnings</span>
       </div>
-      <ul className="mt-2 flex flex-1 flex-col justify-center">
-        {articles.slice(0, 3).map((article, rank) => {
-          const leader = rank === 0;
-          const row = (
-            <>
-              <span
-                className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[0.68rem] font-semibold tabular-nums ${
-                  leader ? "bg-[var(--ink)] text-white" : "bg-[var(--surface-muted)] text-[var(--muted)]"
-                }`}
-              >
-                {rank + 1}
-              </span>
-              <span className={`min-w-0 flex-1 truncate text-sm ${leader ? "font-semibold" : "font-medium"}`}>
-                {article.title}
-              </span>
-              <span className="shrink-0 text-sm font-semibold tabular-nums">{article.earnings}</span>
-            </>
-          );
-          const rowClassName = "flex items-center gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-[var(--surface-muted)]";
-          return (
-            <li key={article.id ?? article.title} className="min-w-0 border-t border-[var(--line)] first:border-t-0">
-              {article.href ? (
-                <Link href={article.href} className={rowClassName}>
-                  {row}
-                </Link>
-              ) : (
-                <div className={rowClassName}>{row}</div>
-              )}
-            </li>
-          );
+      <ol className={`mt-4 grid items-stretch gap-1.5 sm:gap-2 ${podiumGridClass}`} aria-label="Top three articles">
+        {podiumOrder.map((article) => {
+          const rank = leaders.indexOf(article);
+          const style = PODIUM_STYLES[rank] ?? PODIUM_STYLES[2];
+          const percentage = total > 0 && article.value !== undefined ? (article.value / total) * 100 : null;
+          return <PodiumPlace key={article.id ?? article.title} article={article} style={style} percentage={percentage} />;
         })}
-      </ul>
+      </ol>
+      {runners.length > 0 && (
+        <ol className="mt-3 divide-y divide-[var(--line)] border-t border-[var(--line)]" aria-label="Fourth through sixth place">
+          {runners.map((article, index) => {
+            const rank = index + 4;
+            const percentage = total > 0 && article.value !== undefined ? (article.value / total) * 100 : null;
+            return <PodiumRunner key={article.id ?? article.title} article={article} rank={rank} percentage={percentage} />;
+          })}
+        </ol>
+      )}
+    </Card>
+  );
+}
+
+function PodiumPlace({
+  article,
+  style,
+  percentage,
+}: {
+  article: NonNullable<DashboardOverviewProps["topArticles"]>[number];
+  style: typeof PODIUM_STYLES[number];
+  percentage: number | null;
+}) {
+  const content = (
+    <>
+      <div className="relative flex h-[5.5rem] w-full items-end" aria-hidden="true">
+        <div className="relative w-full" style={{ height: style.height }}>
+          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 56" preserveAspectRatio="none">
+            <polygon points="1,9 9,1 99,1 91,9" fill={style.top} stroke={style.line} vectorEffect="non-scaling-stroke" />
+            <polygon points="1,9 91,9 91,55 1,55" fill={style.front} stroke={style.line} vectorEffect="non-scaling-stroke" />
+            <polygon points="91,9 99,1 99,47 91,55" fill={style.side} stroke={style.line} vectorEffect="non-scaling-stroke" />
+          </svg>
+          <span
+            className="absolute left-[46%] top-[57%] grid h-7 w-7 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/45 text-[0.68rem] font-semibold tabular-nums text-white"
+            style={{ backgroundColor: style.badge, zIndex: "var(--dashboard-z-content)" }}
+          >
+            {style.rank}
+          </span>
+        </div>
+      </div>
+      <div className="grid min-w-0 grid-rows-[2.1rem_1rem] px-0.5 pt-2 text-center">
+        <p className="line-clamp-2 w-full text-[0.72rem] font-semibold leading-[1.05rem] text-[var(--ink)] group-hover:text-[var(--river-deep)]" title={article.title}>
+          {article.title}
+        </p>
+        <p className="mt-0.5 flex items-center justify-center gap-1.5 text-[0.64rem] tabular-nums text-[var(--quiet)]">
+          <span className="font-medium text-[var(--muted)]">{article.earnings}</span>
+          {percentage !== null && <span>{percentage.toFixed(1)}%</span>}
+        </p>
+      </div>
+    </>
+  );
+  const className = "group relative flex w-full min-w-0 flex-col justify-end rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--river-line)]";
+  return (
+    <li className="flex min-w-0 self-stretch items-end">
+      {article.href ? <Link href={article.href} className={className}>{content}</Link> : <div className={className}>{content}</div>}
+    </li>
+  );
+}
+
+function PodiumRunner({
+  article,
+  rank,
+  percentage,
+}: {
+  article: NonNullable<DashboardOverviewProps["topArticles"]>[number];
+  rank: number;
+  percentage: number | null;
+}) {
+  const content = (
+    <>
+      <span className="w-7 text-[0.62rem] font-medium tracking-[0.08em] tabular-nums text-[var(--quiet)]" data-rank>{String(rank).padStart(2, "0")}</span>
+      <span className="min-w-0 truncate text-xs font-medium" title={article.title}>{article.title}</span>
+      <span className="text-right text-[0.68rem] font-medium tabular-nums">{article.earnings}</span>
+      <span className="text-right text-[0.66rem] tabular-nums text-[var(--quiet)]">{percentage === null ? "—" : `${percentage.toFixed(1)}%`}</span>
+    </>
+  );
+  const className = "group grid min-h-10 min-w-0 grid-cols-[1.75rem_minmax(0,1fr)_4.5rem_3rem] items-center gap-2 rounded-[5px] px-1.5 transition-[background-color,color] duration-150 hover:bg-black/[0.025] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--river-line)] motion-reduce:transition-none";
+  return (
+    <li className="min-w-0">
+      {article.href ? <Link href={article.href} className={className}>{content}</Link> : <div className={className}>{content}</div>}
+    </li>
+  );
+}
+
+function EarningsBreakdown({ breakdown }: { breakdown: NonNullable<DashboardOverviewProps["breakdown"]> }) {
+  return (
+    <Card className="h-full min-h-[13rem] overflow-hidden">
+      <div className="flex items-end justify-between gap-3 px-4 pb-1 pt-3.5">
+        <div>
+          <h2 className="dashboard-panel-title">Earnings breakdown</h2>
+          <div className="dashboard-meta mt-0.5">All-time settled earnings by article</div>
+        </div>
+        <div className="text-sm font-semibold tabular-nums">{breakdown.totalEarned}</div>
+      </div>
+      <div className="flex min-h-[10rem] items-center px-4 pb-4 pt-2">
+        <Donut slices={breakdown.slices} centerValue={breakdown.totalEarned} centerLabel="All-time earnings" size={132} stroke={12} />
+      </div>
     </Card>
   );
 }
@@ -345,20 +463,25 @@ function TopArticlesRanking({ articles }: { articles: NonNullable<DashboardOverv
 function MoneyActivityChart({ bars }: { bars: TrendBar[] }) {
   const total = bars.reduce((sum, bar) => sum + bar.value, 0);
   const paidDays = bars.filter((bar) => bar.value > 0).length;
+  const hasMeaningfulData = paidDays > 0;
   return (
-    <Card className="flex h-full min-h-[13rem] flex-col p-3.5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold">Earnings activity</h2>
-          <p className="text-xs text-[var(--muted)]">Daily earnings from agent reads</p>
+    <Card className="flex h-full min-h-[20rem] flex-col overflow-hidden">
+      <div className="flex flex-col gap-3 px-4 pb-1 pt-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+        <div className="min-w-0">
+          <h2 className="dashboard-panel-title text-balance">Earnings activity</h2>
+          <p className="dashboard-meta mt-0.5">Last {bars.length} days · settled agent reads</p>
         </div>
         <div className="text-right">
           <div className="text-sm font-semibold tabular-nums">{formatUsdDisplay(total)}</div>
-          <div className="text-[0.68rem] text-[var(--muted)]">{paidDays} paid days</div>
+          <div className="dashboard-meta">{paidDays} paid days</div>
         </div>
       </div>
-      <div className="mt-3 min-h-0 flex-1">
-        <TrendChart bars={bars} formatValue={formatUsdDisplay} height={132} />
+      <div className="flex min-h-0 flex-1 px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
+        {hasMeaningfulData ? (
+          <TrendChart bars={bars} formatValue={formatUsdDisplay} height="100%" />
+        ) : (
+          <ChartEmptyState title="Waiting for first settled read" description="Earnings activity appears after an agent completes a paid read." />
+        )}
       </div>
     </Card>
   );
@@ -388,12 +511,31 @@ const CONTENT_PROTECTION_RULES = [
 ];
 
 export function ContentProtectionPolicy() {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div className="group relative">
-      <button type="button" className="button button-secondary text-sm">
+    <div ref={rootRef} className="relative">
+      <button type="button" onClick={() => setOpen((current) => !current)} className="button button-secondary text-sm" aria-expanded={open} aria-controls="content-protection-popover">
         <ShieldCheck size={15} aria-hidden="true" /> Content Protection Policy
       </button>
-      <div className="pointer-events-none absolute right-0 top-[calc(100%+0.5rem)] z-50 w-[min(27rem,calc(100vw-2rem))] translate-y-1 rounded-[10px] bg-white p-4 text-left opacity-0 transition group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:translate-y-0 group-focus-within:opacity-100">
+      {open && <div id="content-protection-popover" className="absolute right-0 top-[calc(100%+0.5rem)] w-[min(27rem,calc(100vw-2rem))] rounded-[10px] border border-[var(--line)] bg-white p-4 text-left" style={{ zIndex: "var(--dashboard-z-popover)" }}>
         <div className="flex items-center gap-2.5">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--surface-muted)] text-[var(--muted)]">
             <ShieldCheck size={17} aria-hidden="true" />
@@ -414,7 +556,7 @@ export function ContentProtectionPolicy() {
             </div>
           ))}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -424,7 +566,7 @@ function PaymentActivityRows({ rows }: { rows: DashboardOverviewPaymentRow[] }) 
     <Card>
       <CardHeader
         title={
-          <span className="inline-flex items-center gap-2">
+          <span className="inline-flex items-center gap-2 text-sm font-medium">
             Recent payment activity
             {rows.length > 0 && <LiveDot />}
           </span>
@@ -444,20 +586,27 @@ function PaymentActivityRows({ rows }: { rows: DashboardOverviewPaymentRow[] }) 
           />
         </div>
       ) : (
-        <ul className="grid gap-1 px-2 pb-2">
-          {rows.slice(0, 5).map((row) => (
-            <li key={row.id} className="flex min-w-0 items-center justify-between gap-4 rounded-lg px-3 py-2.5 hover:bg-[var(--surface-muted)]">
-              <div className="min-w-0">
-                <div className="truncate font-medium">{row.title}</div>
-                <div className="truncate text-xs text-[var(--muted)]">{row.meta}</div>
-              </div>
-              <div className="flex shrink-0 items-center gap-3">
-                <span className="font-semibold">{row.amount}</span>
-                <PaymentStatusPill status={row.status} />
-              </div>
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="px-4 pt-1 sm:px-5">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-3 border-b border-[var(--line)] pb-2 text-[0.63rem] font-medium uppercase tracking-[0.08em] text-[var(--quiet)]">
+              <span>Article</span>
+              <span className="text-right">Amount</span>
+              <span className="w-[4.7rem] text-right">Status</span>
+            </div>
+          </div>
+          <ul className="divide-y divide-[var(--line)] px-4 pb-1 sm:px-5">
+            {rows.slice(0, 5).map((row) => (
+              <li key={row.id} className="grid min-h-[56px] min-w-0 grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="truncate text-[0.82rem] font-medium">{row.title}</div>
+                  <div className="mt-0.5 text-[0.7rem] text-[var(--muted)]">{row.occurredAt}</div>
+                </div>
+                <span className="shrink-0 text-right text-sm font-semibold tabular-nums">{row.amount}</span>
+                <span className="w-[4.7rem] shrink-0 text-right"><PaymentStatusText status={row.status} /></span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </Card>
   );
@@ -467,7 +616,7 @@ function ArticleRows({ rows }: { rows: DashboardOverviewArticleRow[] }) {
   return (
     <Card>
       <CardHeader
-        title="Your articles"
+        title={<span className="text-sm font-medium">Your articles</span>}
         action={
           <Link href="/dashboard/articles" className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">
             Manage
@@ -488,129 +637,157 @@ function ArticleRows({ rows }: { rows: DashboardOverviewArticleRow[] }) {
           />
         </div>
       ) : (
-        <ul className="grid gap-1 px-2 pb-2">
+        <>
+          <div className="hidden px-4 pt-1 sm:block sm:px-5">
+            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_4.75rem_4.5rem] gap-3 border-b border-[var(--line)] pb-2 text-[0.63rem] font-medium uppercase tracking-[0.08em] text-[var(--quiet)]">
+              <span>Article</span>
+              <span className="text-right">Words</span>
+              <span className="text-right">Earned</span>
+              <span className="text-right">Status</span>
+            </div>
+          </div>
+          <ul className="divide-y divide-[var(--line)] px-4 pb-1 sm:px-5">
           {rows.slice(0, 4).map((row) => {
             const content = (
               <>
                 <div className="min-w-0">
-                  <div className="truncate font-medium">{row.title}</div>
-                  <div className="truncate text-xs text-[var(--muted)]">{row.meta}</div>
+                  <div className="truncate text-[0.82rem] font-medium">{row.title}</div>
+                  <div className="mt-0.5 text-[0.7rem] text-[var(--muted)] sm:hidden">{row.wordsRead.toLocaleString()} words read</div>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <span className="text-sm font-semibold">{row.earnings}</span>
-                  <ArticleStatePill state={row.state} />
-                </div>
+                <span className="hidden text-right text-xs tabular-nums text-[var(--muted)] sm:block">{row.wordsRead.toLocaleString()}</span>
+                <span className="text-right text-sm font-semibold tabular-nums">{row.earnings}</span>
+                <span className="w-[4.5rem] text-right"><ArticleStateText state={row.state} /></span>
               </>
             );
             return (
               <li key={row.id} className="min-w-0">
                 {row.href ? (
-                  <Link href={row.href} className="flex min-w-0 flex-col gap-3 rounded-lg px-3 py-2.5 hover:bg-[var(--surface-muted)] sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                  <Link href={row.href} className="grid min-h-[56px] min-w-0 grid-cols-[minmax(0,1fr)_4.75rem_4.5rem] items-center gap-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_4.5rem_4.75rem_4.5rem]">
                     {content}
                   </Link>
                 ) : (
-                  <div className="flex min-w-0 flex-col gap-3 rounded-lg px-3 py-2.5 hover:bg-[var(--surface-muted)] sm:flex-row sm:items-center sm:justify-between sm:gap-4">{content}</div>
+                  <div className="grid min-h-[56px] min-w-0 grid-cols-[minmax(0,1fr)_4.75rem_4.5rem] items-center gap-3 py-2.5 sm:grid-cols-[minmax(0,1fr)_4.5rem_4.75rem_4.5rem]">{content}</div>
                 )}
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </>
       )}
     </Card>
   );
 }
 
-function WalletCard({ wallet }: { wallet: DashboardOverviewWallet }) {
+const PAYMENT_STATUS_TONES: Record<AnalyticsSettlementStatus, string> = {
+  not_applicable: "text-[var(--muted)] before:bg-[#8b8b91]",
+  pending: "text-[#8a5a10] before:bg-[#c78a22]",
+  confirmed: "text-[#176342] before:bg-[#2e8a61]",
+  completed: "text-[#176342] before:bg-[#2e8a61]",
+  failed: "text-[#963b37] before:bg-[#c5221c]",
+};
+
+function PaymentStatusText({ status }: { status: AnalyticsSettlementStatus }) {
+  const label = status === "not_applicable" ? "Free" : status[0].toUpperCase() + status.slice(1);
+  return <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${PAYMENT_STATUS_TONES[status]} before:h-1.5 before:w-1.5 before:rounded-full before:content-['']`}>{label}</span>;
+}
+
+const ARTICLE_STATE_TONES: Record<ArticleState, string> = {
+  draft: "text-[var(--muted)] before:bg-[#8b8b91]",
+  live: "text-[#176342] before:bg-[#2e8a61]",
+  paused: "text-[#8a5a10] before:bg-[#c78a22]",
+  archived: "text-[var(--muted)] before:bg-[#8b8b91]",
+  deleted: "text-[#963b37] before:bg-[#c5221c]",
+};
+
+function ArticleStateText({ state }: { state: ArticleState }) {
+  return <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${ARTICLE_STATE_TONES[state]} before:h-1.5 before:w-1.5 before:rounded-full before:content-['']`}>{state[0].toUpperCase() + state.slice(1)}</span>;
+}
+
+function PayoutConnectionDialog({ open, onClose, wallet }: { open: boolean; onClose: () => void; wallet: DashboardOverviewWallet }) {
   return (
-    <Card>
-      <CardHeader
-        title="Payout connection"
-        action={
-          wallet.address ? (
-            <div className="flex items-center gap-4">
-              {wallet.onWithdraw && (
-                <button type="button" onClick={wallet.onWithdraw} className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--ink)] hover:underline">
-                  <ArrowRight size={14} aria-hidden="true" /> Withdraw
-                </button>
-              )}
-              {wallet.onRefresh && (
-                <button type="button" onClick={wallet.onRefresh} className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">
-                  <RefreshCw size={14} aria-hidden="true" /> Refresh
-                </button>
-              )}
-            </div>
-          ) : undefined
-        }
-      />
-      {!wallet.address ? (
-        <div className="p-5">
-          <EmptyState
-            icon={<Wallet2 size={22} aria-hidden="true" />}
-            title="Payouts not set up yet"
-            description="Set up the secure account your earnings land in. It takes one click — Rubicon handles the rest."
-            action={
-              <Link href={wallet.settingsHref ?? "/dashboard/settings#payout-connection"} className="button button-primary text-sm">
-                Set up payouts
-              </Link>
-            }
-          />
+    <DashboardDialog open={open} onClose={onClose} labelledBy="payout-connection-title" className="max-w-xl overflow-hidden">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3.5 sm:px-5">
+        <h2 id="payout-connection-title" className="dashboard-panel-title">Payout connection</h2>
+        <div className="flex items-center gap-3">
+          <PayoutConnectionActions wallet={wallet} onClose={onClose} />
+          <button type="button" onClick={onClose} className="dashboard-icon-button" aria-label="Close payout connection">
+            <X size={16} aria-hidden="true" />
+          </button>
         </div>
-      ) : (
-        <div className="grid gap-2.5 p-3">
-          <p className="px-2 text-xs text-[var(--muted)]">Withdrawable earnings are sent through your confirmed payout connection.</p>
-          <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
-            <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
-              <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Wallet address</div>
-              <div className="mt-2 flex items-center gap-2">
-                <span className="mono text-sm font-medium">{wallet.addressLabel ?? shortWallet(wallet.address)}</span>
-                {wallet.onCopy && (
-                  <button type="button" onClick={wallet.onCopy} className="text-[var(--muted)] transition-colors hover:text-[var(--ink)]" aria-label="Copy address">
-                    <Copy size={14} aria-hidden="true" />
-                  </button>
-                )}
-                {wallet.copied && <span className="text-xs text-[var(--green)]">copied</span>}
-              </div>
-              {wallet.explorerHref && (
-                <a
-                  href={wallet.explorerHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline"
-                >
-                  View on {wallet.explorerLabel ?? "explorer"} <ExternalLink size={11} aria-hidden="true" />
-                </a>
-              )}
-            </div>
+      </div>
+      <PayoutConnectionDetails wallet={wallet} />
+    </DashboardDialog>
+  );
+}
 
-            <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
-              <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Network</div>
-              <div className="mt-2 flex items-center gap-2 text-sm font-medium">
-                <Link2 size={14} className="text-[var(--muted)]" aria-hidden="true" /> {wallet.networkName ?? "Not connected"}
-              </div>
-              {wallet.chainId && <div className="mt-2 text-xs text-[var(--muted)]">Chain ID {wallet.chainId}</div>}
-            </div>
-
-            <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
-              <div className="mono text-[0.66rem] uppercase tracking-[0.14em] text-[var(--muted)]">Balance</div>
-              <div className="mt-2 text-2xl font-semibold tracking-[-0.01em]">{wallet.balanceLabel ?? <span className="text-base font-normal text-[var(--muted)]">Loading...</span>}</div>
-              {wallet.balanceError && <div className="mt-1 text-xs text-[var(--muted)]">{wallet.balanceError}</div>}
-            </div>
-          </div>
-        </div>
+function PayoutConnectionActions({ wallet, onClose }: { wallet: DashboardOverviewWallet; onClose: () => void }) {
+  if (!wallet.address) return null;
+  return (
+    <div className="flex items-center gap-3">
+      {wallet.onWithdraw && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            wallet.onWithdraw?.();
+          }}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-[var(--ink)] hover:underline"
+        >
+          <ArrowRight size={14} aria-hidden="true" /> Withdraw
+        </button>
       )}
-    </Card>
+      {wallet.onRefresh && (
+        <button type="button" onClick={wallet.onRefresh} className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">
+          <RefreshCw size={14} aria-hidden="true" /> Refresh
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PayoutConnectionDetails({ wallet }: { wallet: DashboardOverviewWallet }) {
+  if (!wallet.address) {
+    return (
+      <div className="p-5">
+        <EmptyState
+          icon={<Wallet2 size={22} aria-hidden="true" />}
+          title="Payouts not set up yet"
+          description="Set up the secure account your earnings land in. It takes one click — Rubicon handles the rest."
+          action={<Link href={wallet.settingsHref ?? "/dashboard/settings#payout-connection"} className="button button-primary text-sm">Set up payouts</Link>}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-2.5 p-3 sm:p-4">
+      <p className="px-1 text-xs text-[var(--muted)]">Withdrawable earnings are sent through your confirmed payout connection.</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
+          <div className="text-xs font-medium text-[var(--muted)]">Wallet address</div>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="mono text-sm font-medium">{wallet.addressLabel ?? shortWallet(wallet.address)}</span>
+            {wallet.onCopy && <button type="button" onClick={wallet.onCopy} className="text-[var(--muted)] transition-colors hover:text-[var(--ink)]" aria-label="Copy address"><Copy size={14} aria-hidden="true" /></button>}
+            {wallet.copied && <span className="text-xs text-[var(--green)]">copied</span>}
+          </div>
+          {wallet.explorerHref && <a href={wallet.explorerHref} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">View on {wallet.explorerLabel ?? "explorer"} <ExternalLink size={11} aria-hidden="true" /></a>}
+        </div>
+        <div className="rounded-lg border border-[var(--line)] bg-white p-3.5">
+          <div className="text-xs font-medium text-[var(--muted)]">Balance</div>
+          <div className="mt-2 text-2xl font-semibold tracking-[-0.01em]">{wallet.balanceLabel ?? <span className="text-base font-normal text-[var(--muted)]">Loading...</span>}</div>
+          {wallet.balanceError && <div className="mt-1 text-xs text-[var(--muted)]">{wallet.balanceError}</div>}
+        </div>
+      </div>
+    </div>
   );
 }
 
 const PRESET_BACKGROUNDS = [
-  { src: "/export-card-michele-1.jpeg", label: "Harbor" },
+  { src: "/DB_BG.png", label: "Rubicon" },
   { src: "/export-card-michele-2.jpg", label: "Orchard" },
   { src: "/export-card-michele-3.jpg", label: "Lakeside" },
   { src: "/export-card-michele-4.jpg", label: "Village path" },
-  { src: "/export-card-painting.png", label: "Pond" },
 ];
-
-const PRESET_THUMB_SIZE = 44;
 
 function ExportButton({
   username,
@@ -623,33 +800,40 @@ function ExportButton({
 }: DashboardOverviewExport) {
   const reduceMotion = useReducedMotion();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const renderSequenceRef = useRef(0);
+  const renderCacheRef = useRef(new Map<string, string>());
   const [open, setOpen] = useState(false);
+  const [warmPreview, setWarmPreview] = useState(false);
   const [pngUrl, setPngUrl] = useState<string | null>(null);
+  const [rendering, setRendering] = useState(true);
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "blocked">("idle");
-  const [celebrationKey, setCelebrationKey] = useState(0);
-  const [bgImage, setBgImage] = useState<string>("/export-card-michele-1.jpeg");
+  const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
+  const [bgImage, setBgImage] = useState<string>("/DB_BG.png");
   const [customBgs, setCustomBgs] = useState<{ src: string; label: string }[]>([]);
-  const [loadedPresets, setLoadedPresets] = useState<{ src: string; label: string }[]>([]);
 
-  // check which preset images actually load
   useEffect(() => {
-    const checkPresets = async () => {
-      const results: { src: string; label: string }[] = [];
-      for (const p of PRESET_BACKGROUNDS) {
-        const img = await loadImage(p.src);
-        if (img) results.push(p);
-      }
-      setLoadedPresets(results);
-    };
-    checkPresets();
+    // Let the overview complete its one entrance transition, then prepare the
+    // default card offscreen. Opening Export is consequently instant while the
+    // page's initial paint remains free of canvas work.
+    const timer = window.setTimeout(() => setWarmPreview(true), 360);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  const allBackgrounds = [...loadedPresets, ...customBgs];
+  const allBackgrounds = [...PRESET_BACKGROUNDS, ...customBgs];
 
   useEffect(() => {
-    let cancelled = false;
-    setPngUrl(null);
-    renderExportPng({
+    if (!warmPreview && !open) return;
+
+    const sequence = ++renderSequenceRef.current;
+    const renderKey = JSON.stringify({ username, avatarUrl, totalEarned, wordsRead, agentReads, topArticle, trendBars, bgImage });
+    const cached = renderCacheRef.current.get(renderKey);
+    if (cached) {
+      setPngUrl(cached);
+      setRendering(false);
+      return;
+    }
+    setRendering(true);
+    void renderExportPng({
       username,
       avatarUrl,
       amount: formatUsdDisplay(totalEarned),
@@ -659,12 +843,12 @@ function ExportButton({
       trendBars,
       bgImage,
     }).then((url) => {
-      if (!cancelled) setPngUrl(url);
+      if (!url || sequence !== renderSequenceRef.current) return;
+      renderCacheRef.current.set(renderKey, url);
+      setPngUrl(url);
+      setRendering(false);
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [agentReads, avatarUrl, topArticle, totalEarned, trendBars, username, wordsRead, bgImage]);
+  }, [agentReads, avatarUrl, topArticle, totalEarned, trendBars, username, wordsRead, bgImage, open, warmPreview]);
 
   const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -704,9 +888,10 @@ function ExportButton({
       }
       await navigator.clipboard.write([new ClipboardItem({ "image/png": dataUrlToPngBlob(pngUrl) })]);
       setCopyStatus("copied");
-      setCelebrationKey((key) => key + 1);
+      markCompletion("success");
     } catch {
       setCopyStatus("blocked");
+      markCompletion("failure");
     }
     window.setTimeout(() => setCopyStatus("idle"), 2200);
   };
@@ -717,165 +902,115 @@ function ExportButton({
         <Download size={15} aria-hidden="true" /> Export card
       </button>
 
-      <AnimatePresence>
-        {open && (
-        <motion.div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          onClick={() => setOpen(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Export card"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.16, ease: [0.23, 1, 0.32, 1] }}
-        >
-          <motion.div
-            className="relative w-full max-w-md overflow-hidden rounded-[var(--radius-lg)] bg-white"
-            onClick={(e) => e.stopPropagation()}
-            initial={reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(8px) scale(0.97)" }}
-            animate={{ opacity: 1, transform: "translateY(0px) scale(1)" }}
-            exit={reduceMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(4px) scale(0.985)" }}
-            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
-          >
-            <AnimatePresence>{copyStatus === "copied" && <CopyCelebration key={celebrationKey} />}</AnimatePresence>
-            <div className="flex items-center justify-between border-b border-[var(--faint)] px-5 py-4">
-              <div>
-                <h2 className="text-base font-semibold">Export card</h2>
-                <p className="text-xs text-[var(--muted)]">X-ready PNG · 1080 × 1350</p>
-              </div>
+      <DashboardDialog
+        open={open}
+        onClose={() => setOpen(false)}
+        labelledBy="export-card-title"
+        className="export-card-dialog !w-[min(100%,20rem)]"
+      >
+            <div className="flex items-center justify-between px-4 py-2.5">
+              <h2 id="export-card-title" className="text-base font-semibold">Export card</h2>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="text-[var(--muted)] transition-colors hover:text-[var(--ink)]"
+                className="dashboard-icon-button h-7 min-h-7 w-7 min-w-7"
                 aria-label="Close"
               >
-                <X size={18} aria-hidden="true" />
+                <X size={16} aria-hidden="true" />
               </button>
             </div>
 
-            {allBackgrounds.length > 0 && (
-              <div className="border-b border-[var(--faint)] px-5 py-3">
-                <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.6px] text-[var(--muted)]">Background</p>
-                <div className="flex flex-wrap gap-2">
-                  {allBackgrounds.map((bg) => (
-                    <button
-                      key={bg.src}
-                      type="button"
-                      onClick={() => setBgImage(bg.src)}
-                      title={bg.label}
-                      className={`relative overflow-hidden rounded-[var(--radius-ui)] transition-all ${
-                        bgImage === bg.src
-                          ? "ring-2 ring-[var(--ink)] ring-offset-1"
-                          : "ring-1 ring-[var(--line)] hover:ring-[var(--muted)]"
-                      }`}
-                      style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
-                    >
-                      <img
-                        src={bg.src}
-                        alt={bg.label}
-                        className="h-full w-full object-cover"
-                        draggable={false}
-                      />
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    title="Upload custom image"
-                    className="flex items-center justify-center rounded-[var(--radius-ui)] border border-dashed border-[var(--line)] text-[var(--muted)] transition-colors hover:border-[var(--muted)] hover:text-[var(--ink)]"
-                    style={{ width: PRESET_THUMB_SIZE, height: PRESET_THUMB_SIZE }}
-                  >
-                    <ImagePlus size={17} aria-hidden="true" />
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    aria-label="Upload background image"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="p-5">
-              <div className="mx-auto w-full max-w-[320px] overflow-hidden rounded-[18px] bg-[#eceef4]">
+            <div className="flex min-w-0 flex-col gap-3 p-4 pt-1">
+              <div className="relative mx-auto w-full shrink-0 overflow-hidden rounded-[18px] bg-[var(--surface-muted)]">
                 {pngUrl ? (
                   <img
                     src={pngUrl}
                     alt={`${username} Rubicon earnings export card`}
-                    className="block aspect-[4/5] h-auto w-full object-cover"
+                    className="block aspect-square h-auto w-full object-cover"
                     draggable={false}
                   />
                 ) : (
-                  <div className="aspect-[4/5] animate-pulse bg-[var(--surface-muted)]" />
+                  <img
+                    src={bgImage}
+                    alt=""
+                    className="block aspect-square h-auto w-full object-cover"
+                    aria-hidden="true"
+                  />
                 )}
+                {rendering && pngUrl && <div className="pointer-events-none absolute inset-0 bg-white/25" aria-label="Updating preview" />}
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <button type="button" onClick={download} className="button button-primary justify-center text-sm" disabled={!pngUrl}>
-                  <Download size={15} aria-hidden="true" /> Download
-                </button>
-                <motion.button
-                  type="button"
-                  onClick={copyImage}
-                  className={`button export-copy-button justify-center text-sm ${copyStatus === "copied" ? "is-copied" : "button-secondary"}`}
-                  disabled={!pngUrl}
-                  animate={!reduceMotion && copyStatus === "copied" ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
-                  transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
-                >
-                  {copyStatus === "copied" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
-                  <span aria-live="polite">{copyStatus === "copied" ? "Copied" : copyStatus === "blocked" ? "Copy blocked" : "Copy PNG"}</span>
-                </motion.button>
+              <div className="flex min-w-0 flex-col gap-3">
+                {allBackgrounds.length > 0 && (
+                  <div className="min-w-0">
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {allBackgrounds.map((bg) => (
+                        <button
+                          key={bg.src}
+                          type="button"
+                          onClick={() => setBgImage(bg.src)}
+                          title={bg.label}
+                          aria-pressed={bgImage === bg.src}
+                          className={`relative aspect-square min-w-0 overflow-hidden rounded-[var(--radius-ui)] border-2 transition-[border-color] ${
+                            bgImage === bg.src
+                              ? "border-[var(--ink)]"
+                              : "border-[var(--line)] hover:border-[var(--muted)]"
+                          }`}
+                        >
+                          <img
+                            src={bg.src}
+                            alt={bg.label}
+                            className="h-full w-full object-cover"
+                            draggable={false}
+                          />
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        title="Upload custom image"
+                        className="aspect-square min-w-0 rounded-[var(--radius-ui)] border border-dashed border-[var(--line)] text-[var(--muted)] transition-colors hover:border-[var(--muted)] hover:text-[var(--ink)]"
+                      >
+                        <ImagePlus size={18} aria-hidden="true" />
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                        aria-label="Upload background image"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-auto grid grid-cols-2 gap-2">
+                  <button type="button" onClick={download} className="button button-primary justify-center text-sm" disabled={!pngUrl}>
+                    <Download size={15} aria-hidden="true" /> Download
+                  </button>
+                  <div className="relative min-w-0 overflow-visible">
+                    <SuccessCelebration active={celebrating} celebrationKey={celebrationKey} />
+                    <motion.button
+                      type="button"
+                      onClick={copyImage}
+                      className={`button export-copy-button relative w-full justify-center text-sm ${copyStatus === "copied" ? "is-copied" : "button-secondary"}`}
+                      disabled={!pngUrl || rendering}
+                      animate={!reduceMotion && copyStatus === "copied" ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
+                      transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+                    >
+                      {copyStatus === "copied" ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
+                      <span aria-live="polite">{copyStatus === "copied" ? "Copied" : copyStatus === "blocked" ? "Copy blocked" : "Copy PNG"}</span>
+                    </motion.button>
+                  </div>
+                  {copyStatus === "blocked" && (
+                    <p className="text-xs text-[var(--muted)]">This browser blocked image clipboard access. Use Download as a fallback.</p>
+                  )}
+                </div>
               </div>
-              {copyStatus === "blocked" && (
-                <p className="mt-2 text-xs text-[var(--muted)]">This browser blocked image clipboard access. Use Download as a fallback.</p>
-              )}
             </div>
-          </motion.div>
-        </motion.div>
-        )}
-      </AnimatePresence>
+      </DashboardDialog>
     </>
-  );
-}
-
-const CONFETTI = [
-  [-150, -250, -38, "#246bfd"], [-112, -292, 42, "#18181b"], [-72, -235, -76, "#62c79b"],
-  [-36, -320, 88, "#f0b64d"], [0, -260, -28, "#246bfd"], [34, -305, 64, "#e46d67"],
-  [70, -242, -54, "#18181b"], [108, -286, 36, "#62c79b"], [148, -252, -82, "#f0b64d"],
-  [-132, -190, 70, "#e46d67"], [-88, -214, -44, "#246bfd"], [-48, -178, 92, "#62c79b"],
-  [46, -196, -62, "#f0b64d"], [88, -218, 52, "#e46d67"], [130, -188, -96, "#246bfd"],
-] as const;
-
-function CopyCelebration() {
-  const reduceMotion = useReducedMotion();
-  if (reduceMotion) return null;
-
-  return (
-    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
-      {CONFETTI.map(([x, y, rotate, color], index) => (
-        <motion.span
-          key={`${x}-${y}`}
-          className="absolute bottom-[62px] left-1/2 h-2.5 w-1.5 rounded-[2px]"
-          style={{ background: color }}
-          initial={{ opacity: 0, transform: "translate(-50%, 0) rotate(0deg) scale(0.92)" }}
-          animate={{
-            opacity: [0, 1, 1, 0],
-            transform: [
-              "translate(-50%, 0) rotate(0deg) scale(0.92)",
-              `translate(calc(-50% + ${x * 0.45}px), ${y * 0.58}px) rotate(${rotate * 0.45}deg) scale(1)`,
-              `translate(calc(-50% + ${x}px), ${y}px) rotate(${rotate}deg) scale(0.96)`,
-              `translate(calc(-50% + ${x * 1.08}px), ${y + 72}px) rotate(${rotate + 80}deg) scale(0.9)`,
-            ],
-          }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.78, delay: index * 0.018, ease: [0.23, 1, 0.32, 1] }}
-        />
-      ))}
-    </div>
   );
 }
 
@@ -906,7 +1041,7 @@ async function renderExportPng({
   bgImage: string;
 }) {
   const W = 1080;
-  const H = 1350;
+  const H = 1080;
   // Render at 2x so the exported PNG stays crisp on retina and when scaled up
   // on social. All drawing below uses logical (1x) coordinates.
   const scale = 2;
@@ -918,13 +1053,15 @@ async function renderExportPng({
   ctx.scale(scale, scale);
   ctx.textBaseline = "alphabetic";
 
-  const INK = "#0b0d12";
-  const PAPER = "#ffffff";
-  const MUTED = "rgba(11,13,18,0.55)";
-  const QUIET = "rgba(11,13,18,0.34)";
-  const HAIRLINE = "rgba(11,13,18,0.12)";
-  const RIVER = "#7f9cd4";
-  const GAIN = "#1f8f4e";
+  // The card now sits over a full-strength background, so the typographic
+// hierarchy is light-on-dark: the dominant figure and labels are white, with
+// muted/quiet tiers pulled from white at decreasing opacity.
+  const INK = "#ffffff";
+  const PAPER = "#101114";
+  const MUTED = "rgba(255,255,255,0.72)";
+  const QUIET = "rgba(255,255,255,0.5)";
+  const POSITIVE = "#8BE3B1";
+  const NEGATIVE = "#FFAAA3";
 
   // The dashboard's own faces (Hanken Grotesk / JetBrains Mono) carry into the
   // artifact; wait for them so the canvas doesn't rasterize a fallback.
@@ -942,9 +1079,8 @@ async function renderExportPng({
     avatarUrl ? loadImage(avatarUrl) : Promise.resolve(null),
   ]);
 
-  const MARGIN = 64;
+  const MARGIN = 82;
   const RIGHT = W - MARGIN;
-  const CROSSING = 620;
 
   // letterSpacing lands on the 2d context in modern browsers but isn't yet in
   // the TS DOM lib; cast so the source type-checks.
@@ -967,112 +1103,64 @@ async function renderExportPng({
     ctx.textAlign = "left";
   };
 
-  const hairline = (y: number) => {
-    ctx.strokeStyle = HAIRLINE;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(MARGIN, y);
-    ctx.lineTo(RIGHT, y);
-    ctx.stroke();
-  };
-
-  // ---- upper bank: the artwork, vivid and full-bleed ----------------------
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(0, 0, W, H);
+  // The chosen background runs full-strength edge to edge over the whole card
+// — no white scrim over it. Text legibility comes from soft local darkening
+  // behind the typographic blocks (drawn later), so the artwork reads while the
+// data stays readable.
+  ctx.clearRect(0, 0, W, H);
   if (painting) {
-    drawCoverImage(ctx, painting, 0, 0, W, CROSSING);
+    drawCoverImage(ctx, painting, 0, 0, W, H);
+    // A faint top-to-bottom darkening keeps the white Rubicon mark, the date
+    // range, and the footer legible without bleaching the artwork — the only
+    // overlay on top of the background.
+    const shade = ctx.createLinearGradient(0, 0, 0, H);
+    shade.addColorStop(0, "rgba(0,0,0,0.34)");
+    shade.addColorStop(0.4, "rgba(0,0,0,0.12)");
+    shade.addColorStop(0.62, "rgba(0,0,0,0.30)");
+    shade.addColorStop(1, "rgba(0,0,0,0.52)");
+    ctx.fillStyle = shade;
+    ctx.fillRect(0, 0, W, H);
+  } else {
+    ctx.fillStyle = PAPER;
+    ctx.fillRect(0, 0, W, H);
   }
 
-  // Keep a dark wash under the white top chrome for legibility.
-  const chrome = ctx.createLinearGradient(0, 0, 0, 200);
-  chrome.addColorStop(0, "rgba(6,9,14,0.55)");
-  chrome.addColorStop(1, "rgba(6,9,14,0)");
-  ctx.fillStyle = chrome;
-  ctx.fillRect(0, 0, W, 200);
+  // Real Rubicon lockup at top left, quiet range at top right.
+  if (logo) ctx.drawImage(logo, 110, 760, 1740, 470, MARGIN, 68, 196, 53);
+  const rangeStart = trendBars[0]?.label ?? "Start";
+  const rangeEnd = trendBars[trendBars.length - 1]?.label ?? "Today";
+  monoLabel(`${rangeStart} — ${rangeEnd}`, RIGHT, 100, { align: "right", color: QUIET, size: 12, tracking: "1.8px" });
 
-  // The source SVG has a roomy square artboard. Crop to its horizontal lockup
-  // so the real white Rubicon mark sits cleanly in the top-left corner.
-  if (logo) {
-    // drawImage uses the SVG's intrinsic 2000px dimensions, not its 1500-unit
-    // viewBox. These source coordinates account for that 4/3 scale.
-    ctx.drawImage(logo, 110, 760, 1740, 470, MARGIN, 54, 210, 57);
-  }
-  monoLabel("PROOF OF PAID READS", RIGHT, 90, { align: "right", color: "rgba(255,255,255,0.85)" });
-
-  // ---- lower bank: the ledger ----------------------------------------------
-  ctx.fillStyle = PAPER;
-  ctx.fillRect(0, CROSSING, W, H - CROSSING);
-
-  // The crossing itself — the only full-bleed rule on the card.
-  ctx.strokeStyle = "rgba(11,13,18,0.8)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, CROSSING);
-  ctx.lineTo(W, CROSSING);
-  ctx.stroke();
-
-  // ---- the figure, mid-crossing --------------------------------------------
-  // Sized to fit the column and drawn last across both banks.
+  monoLabel("Total earnings", MARGIN, 218, { color: MUTED, size: 14 });
   setSpacing("-4px");
-  let amountSize = 192;
+  let amountSize = 176;
   ctx.font = `800 ${amountSize}px ${SANS}`;
-  while (amountSize > 96 && ctx.measureText(amount).width > RIGHT - MARGIN) {
+  while (amountSize > 88 && ctx.measureText(amount).width > RIGHT - MARGIN) {
     amountSize -= 8;
     ctx.font = `800 ${amountSize}px ${SANS}`;
   }
   ctx.fillStyle = INK;
-  ctx.fillText(amount, MARGIN - 4, CROSSING + 96);
+  ctx.fillText(amount, MARGIN - 4, 394);
   setSpacing("0px");
 
-  // Positive growth is useful proof; negative growth is intentionally omitted
-  // from a share artifact rather than turning it into a dashboard report.
   const delta = computeTrendDelta(trendBars.map((bar) => bar.value));
-  const captionY = CROSSING + 152;
-  monoLabel("EARNED FROM AGENT READS", MARGIN, captionY, { size: 15 });
-  if (delta.up && delta.label.startsWith("+")) {
-    ctx.font = `700 15px ${MONO}`;
-    setSpacing("2.5px");
-    const captionW = ctx.measureText("EARNED FROM AGENT READS").width;
-    setSpacing("0px");
-    monoLabel(`${delta.label} VS PRIOR WEEK`, MARGIN + captionW + 28, captionY, { size: 15, color: GAIN });
-  }
+  monoLabel(`${delta.label} vs previous period`, MARGIN, 454, { color: delta.up ? POSITIVE : NEGATIVE, size: 14 });
 
-  // ---- ruled ledger rows ----------------------------------------------------
-  const rows = [
-    { label: "AGENT READS", value: reads, size: 32 },
-    { label: "PAID WORDS", value: words, size: 32 },
-    { label: "TOP PAID ARTICLE", value: topArticle, size: 26 },
-  ];
-  const ledgerTop = 838;
-  const rowH = 72;
-  rows.forEach((row, i) => {
-    const top = ledgerTop + i * rowH;
-    hairline(top);
-    monoLabel(row.label, MARGIN, top + 45);
-    ctx.font = `600 ${row.size}px ${SANS}`;
-    ctx.fillStyle = INK;
-    ctx.textAlign = "right";
-    ctx.fillText(truncateForCanvas(ctx, row.value, RIGHT - MARGIN - 260), RIGHT, top + 46);
-    ctx.textAlign = "left";
-  });
-  hairline(ledgerTop + rows.length * rowH);
+  monoLabel("Earnings activity", MARGIN, 548, { color: MUTED, size: 13 });
+  drawEarningsLine(ctx, MARGIN, 584, RIGHT - MARGIN, 180, trendBars, { ink: INK, fill: "rgba(255,255,255,0.16)" });
 
-  // ---- 14-day strip ---------------------------------------------------------
-  const stripLabelY = 1102;
-  monoLabel("EARNINGS ACTIVITY", MARGIN, stripLabelY, { color: QUIET });
-  monoLabel("LAST 14 DAYS", RIGHT, stripLabelY, { align: "right", color: QUIET });
-  drawEarningsStrip(ctx, MARGIN, 1126, RIGHT - MARGIN, 78, trendBars, {
-    paid: RIVER,
-    peak: INK,
-    rest: "rgba(11,13,18,0.22)",
-    baseline: HAIRLINE,
-    labels: QUIET,
-    mono: MONO,
-  });
+  monoLabel("Agent reads", MARGIN, 824, { color: QUIET, size: 12 });
+  monoLabel("Paid words", 326, 824, { color: QUIET, size: 12 });
+  monoLabel("Top paid article", 570, 824, { color: QUIET, size: 12 });
+  ctx.fillStyle = INK;
+  ctx.font = `700 36px ${SANS}`;
+  ctx.fillText(reads, MARGIN, 872);
+  ctx.fillText(words, 326, 872);
+  ctx.font = `650 27px ${SANS}`;
+  drawCanvasLines(ctx, topArticle, 570, 868, RIGHT - 570, 34, 2);
 
-  // ---- signature ------------------------------------------------------------
-  const avatarSize = 44;
-  const avatarY = 1258;
+  const avatarSize = 42;
+  const avatarY = 972;
   const footBaseline = avatarY + 29;
   ctx.save();
   ctx.beginPath();
@@ -1090,27 +1178,27 @@ async function renderExportPng({
     ctx.textAlign = "left";
   }
   ctx.restore();
-  ctx.strokeStyle = "rgba(11,13,18,0.18)";
+  ctx.strokeStyle = "rgba(255,255,255,0.32)";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.arc(MARGIN + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 - 0.5, 0, Math.PI * 2);
   ctx.stroke();
   ctx.fillStyle = INK;
-  ctx.font = `700 21px ${SANS}`;
+  ctx.font = `700 19px ${SANS}`;
   ctx.fillText(username, MARGIN + avatarSize + 16, footBaseline);
 
   // bottom-right: creator-first Rubicon attribution
   const lead = "Creating on ";
-  ctx.font = `500 18px ${SANS}`;
+  ctx.font = `500 17px ${SANS}`;
   const leadW = ctx.measureText(lead).width;
-  ctx.font = `700 18px ${SANS}`;
+  ctx.font = `700 17px ${SANS}`;
   const brandW = ctx.measureText("Rubicon").width;
   const attributionX = RIGHT - leadW - brandW;
   ctx.fillStyle = MUTED;
-  ctx.font = `500 18px ${SANS}`;
+  ctx.font = `500 17px ${SANS}`;
   ctx.fillText(lead, attributionX, footBaseline);
   ctx.fillStyle = INK;
-  ctx.font = `700 18px ${SANS}`;
+  ctx.font = `700 17px ${SANS}`;
   ctx.fillText("Rubicon", attributionX + leadW, footBaseline);
 
   return canvas.toDataURL("image/png");
@@ -1126,64 +1214,69 @@ function resolveCanvasFontStack(cssVar: string, fallback: string) {
   return families ? `${families}, ${fallback}` : fallback;
 }
 
-/**
- * The 14-day trend as a scan strip: one thin stroke per day rising from a
- * shared baseline — days agents paid read like marks on a scanned code, quiet
- * days stay as countable notches, and the best day is picked out in white.
- */
-function drawEarningsStrip(
+function drawEarningsLine(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   width: number,
   height: number,
   bars: TrendBar[],
-  colors: { paid: string; peak: string; rest: string; baseline: string; labels: string; mono: string },
+  colors: { ink: string; fill: string },
 ) {
-  const data = normalizeFourteenBars(bars);
-  const max = Math.max(...data.map((bar) => bar.value), 0);
-  const peak = data.reduce((best, bar, i) => (bar.value > data[best].value ? i : best), 0);
-  const baseY = y + height;
-  const slot = width / data.length;
-  const strokeW = 7;
+  const values = bars.length > 0 ? bars.map((bar) => Math.max(0, bar.value)) : [0, 0];
+  if (values.length === 1) values.push(values[0]);
+  const max = Math.max(...values, 0);
+  const domainMax = max > 0 ? max * 1.12 : 1;
+  const points = values.map((value, index) => ({
+    x: x + (index / (values.length - 1)) * width,
+    y: y + height - (value / domainMax) * height,
+  }));
 
-  data.forEach((bar, i) => {
-    const bx = x + i * slot + (slot - strokeW) / 2;
-    if (bar.value <= 0 || max <= 0) {
-      ctx.fillStyle = colors.rest;
-      ctx.fillRect(bx, baseY - 5, strokeW, 5);
-      return;
-    }
-    const strokeH = Math.max(10, (bar.value / max) * height);
-    ctx.fillStyle = i === peak ? colors.peak : colors.paid;
-    roundRect(ctx, bx, baseY - strokeH, strokeW, strokeH, 3);
-    ctx.fill();
-  });
-
-  ctx.strokeStyle = colors.baseline;
-  ctx.lineWidth = 1;
+  const area = ctx.createLinearGradient(0, y, 0, y + height);
+  area.addColorStop(0, colors.fill);
+  area.addColorStop(1, "rgba(16,17,20,0)");
   ctx.beginPath();
-  ctx.moveTo(x, baseY + 2);
-  ctx.lineTo(x + width, baseY + 2);
+  ctx.moveTo(points[0].x, y + height);
+  points.forEach((point) => ctx.lineTo(point.x, point.y));
+  ctx.lineTo(points[points.length - 1].x, y + height);
+  ctx.closePath();
+  ctx.fillStyle = area;
+  ctx.fill();
+
+  ctx.beginPath();
+  points.forEach((point, index) => index === 0 ? ctx.moveTo(point.x, point.y) : ctx.lineTo(point.x, point.y));
+  ctx.strokeStyle = colors.ink;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
   ctx.stroke();
 
-  ctx.fillStyle = colors.labels;
-  ctx.font = `700 12px ${colors.mono}`;
-  ctx.fillText(data[0]?.label ?? "", x, baseY + 28);
-  ctx.textAlign = "right";
-  ctx.fillText(data[data.length - 1]?.label ?? "", x + width, baseY + 28);
-  ctx.textAlign = "left";
 }
 
-function normalizeFourteenBars(bars: TrendBar[]): TrendBar[] {
-  const fallback = Array.from({ length: 14 }, (_, index) => ({
-    label: index === 0 ? "14d" : index === 13 ? "Now" : "",
-    fullLabel: "",
-    value: 0,
-  }));
-  if (bars.length === 0) return fallback;
-  if (bars.length >= 14) return bars.slice(bars.length - 14);
-  return [...fallback.slice(0, 14 - bars.length), ...bars];
+function drawCanvasLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number,
+) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth || !current) current = candidate;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  const visible = lines.slice(0, maxLines);
+  if (lines.length > maxLines) visible[maxLines - 1] = truncateForCanvas(ctx, `${visible[maxLines - 1]}…`, maxWidth);
+  visible.forEach((line, index) => ctx.fillText(line, x, y + index * lineHeight));
 }
 
 function drawCoverImage(
@@ -1253,27 +1346,6 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
     img.onerror = () => resolve(null);
     img.src = src;
   });
-}
-
-function DeltaHint({ pct, onDark = false }: { pct: number | null; onDark?: boolean }) {
-  if (pct === null) return null;
-  if (Math.abs(pct) < 1) {
-    return <span className="inline-flex rounded-full bg-[var(--surface-muted)] px-2.5 py-1 font-medium text-[var(--muted)]">Flat vs last week</span>;
-  }
-  const up = pct > 0;
-  const color = up
-    ? onDark
-      ? "bg-white/10 text-[var(--gain-on-dark)]"
-      : "bg-[#e8f6ef] text-[var(--gain)]"
-    : onDark
-      ? "bg-white/10 text-[var(--loss-on-dark)]"
-      : "bg-[#fde8e6] text-[var(--loss)]";
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 font-medium ${color}`}>
-      {up ? "+" : "−"}
-      {Math.abs(Math.round(pct))}% vs last week
-    </span>
-  );
 }
 
 function LiveDot() {

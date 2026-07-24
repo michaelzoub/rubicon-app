@@ -3,15 +3,18 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, ExternalLink, Loader2 } from "lucide-react";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, Check, ExternalLink, Loader2 } from "lucide-react";
 import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { atomicToUsd, usdToAtomic } from "@/lib/rubicon/pricing";
 import { Card, ErrorState, LoadingState } from "../../_components/ui";
 import { MarkdownEditor } from "../../_components/markdown-editor";
+import { SuccessCelebration, useSuccessCelebration } from "../../_components/success-celebration";
 
 const inputClass = "h-11 rounded-lg bg-[var(--surface-muted)] px-3 outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]";
 
 export default function ImportedDraftReviewPage() {
+  const reduceMotion = useReducedMotion();
   const { draftId } = useParams<{ draftId: string }>();
   const router = useRouter();
   const article = useRubiconQuery((c) => c.getArticle(draftId), [draftId], { queryKey: ["article"] });
@@ -22,6 +25,7 @@ export default function ImportedDraftReviewPage() {
   const [author, setAuthor] = useState("");
   const [body, setBody] = useState("");
   const [price, setPrice] = useState("");
+  const { celebrationKey, celebrating, markCompletion } = useSuccessCelebration();
 
   useEffect(() => {
     if (!data) return;
@@ -42,6 +46,8 @@ export default function ImportedDraftReviewPage() {
     });
     if (andPublish) {
       await publish.run(draftId);
+      markCompletion("success");
+      await new Promise((resolve) => window.setTimeout(resolve, 850));
       router.push(`/dashboard/articles/${draftId}`);
     } else {
       article.refetch();
@@ -54,7 +60,7 @@ export default function ImportedDraftReviewPage() {
         <ArrowLeft size={15} aria-hidden="true" /> All articles
       </Link>
       <div>
-        <p className="mono text-xs uppercase tracking-[0.14em] text-[var(--river)]">Imported draft</p>
+        <p className="text-xs font-medium text-[var(--river)]">Imported draft</p>
         <h1 className="mt-2 text-3xl font-semibold">Review before publishing</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">We only import the article you choose. Nothing is posted or published automatically.</p>
       </div>
@@ -88,9 +94,19 @@ export default function ImportedDraftReviewPage() {
           {(update.error || publish.error) && <p className="rounded-lg bg-[#fff1f0] px-4 py-3 text-sm text-[#8d2f2d]">{(update.error ?? publish.error)?.message}</p>}
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => save(false)} disabled={!valid || update.pending || publish.pending} className="button button-secondary disabled:opacity-50">Save draft</button>
-            <button type="button" onClick={() => save(true)} disabled={!valid || update.pending || publish.pending} className="button button-primary disabled:opacity-50">
-              {(update.pending || publish.pending) && <Loader2 size={15} className="animate-spin" aria-hidden="true" />} Publish
-            </button>
+            <div className="relative overflow-visible">
+              <SuccessCelebration active={celebrating} celebrationKey={celebrationKey} />
+              <motion.button
+                type="button"
+                onClick={() => save(true)}
+                disabled={!valid || update.pending || publish.pending || celebrating}
+                className="button button-primary relative disabled:opacity-50"
+                animate={!reduceMotion && celebrating ? { transform: ["scale(1)", "scale(1.045)", "scale(1)"] } : { transform: "scale(1)" }}
+                transition={{ duration: 0.28, ease: [0.23, 1, 0.32, 1] }}
+              >
+                {celebrating ? <><Check size={15} aria-hidden="true" /> Published</> : <>{(update.pending || publish.pending) && <Loader2 size={15} className="animate-spin" aria-hidden="true" />} Publish</>}
+              </motion.button>
+            </div>
           </div>
           <p className="text-right text-xs text-[var(--muted)]">Agents can preview metadata, but paid content remains hidden until purchased.</p>
         </Card>

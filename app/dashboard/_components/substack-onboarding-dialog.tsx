@@ -163,19 +163,6 @@ type UploadState =
   | { phase: "parsing" }
   | { phase: "error"; message: string };
 
-/**
- * First-paint surface while auth and creator state resolve. It deliberately
- * matches the opening onboarding frame so a new writer never sees dashboard
- * chrome before the flow begins.
- */
-export function OnboardingEntryScreen() {
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-white" role="status" aria-label="Loading Rubicon">
-      <Image className="animate-pulse" src="/w_logo.png" alt="" width={52} height={52} priority />
-    </div>
-  );
-}
-
 export function SubstackOnboardingDialog({
   shouldOpen,
   forceOpen = false,
@@ -1816,14 +1803,14 @@ export function SubstackOnboardingDialog({
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <div className="rounded-lg bg-[var(--surface-muted)] p-4">
-                <div className="mono text-[0.65rem] uppercase leading-4 tracking-[0.1em] text-[var(--muted)]">Your average post</div>
+                <div className="text-xs font-medium leading-4 text-[var(--muted)]">Your average post</div>
                 <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-[-0.02em]">
                   ${(archive.averageWordCount * (isFree ? 0 : price)).toFixed(2)}
                 </div>
                 <div className="mt-1 text-xs text-[var(--muted)]">{archive.averageWordCount.toLocaleString()} words</div>
               </div>
               <div className="rounded-lg bg-[var(--surface-muted)] p-4">
-                <div className="mono text-[0.65rem] uppercase leading-4 tracking-[0.1em] text-[var(--muted)]">Full archive</div>
+                <div className="text-xs font-medium leading-4 text-[var(--muted)]">Full archive</div>
                 <div className="mt-1.5 text-xl font-semibold tabular-nums tracking-[-0.02em]">
                   ${archiveTotalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
@@ -1940,7 +1927,10 @@ export function SubstackOnboardingDialog({
     </div>
   );
 
-  if (!portalReady) return <OnboardingEntryScreen />;
+  // The parent owns the auth/data loading surface. Returning another full-page
+  // loader here would remount it once for portal hydration and replay its
+  // entrance animation over the already-mounted dashboard.
+  if (!portalReady) return null;
   return createPortal(onboardingPage, document.body);
 }
 

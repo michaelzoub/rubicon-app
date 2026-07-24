@@ -24,7 +24,9 @@ export function useNativeBalance(address: string | null | undefined): BalanceSta
 
   const load = useCallback(() => {
     if (!address) {
-      setState({ status: "idle", value: null, symbol, error: null });
+      setState((current) => current.status === "idle" && current.value === null && current.symbol === symbol && current.error === null
+        ? current
+        : { status: "idle", value: null, symbol, error: null });
       return () => {};
     }
     let cancelled = false;

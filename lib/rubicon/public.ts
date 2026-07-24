@@ -10,6 +10,8 @@
  * back to the public anon key (which requires an RLS policy permitting anon
  * SELECT on live articles + creators).
  */
+import "server-only";
+
 import { createClient } from "@supabase/supabase-js";
 import type { ArticleAccessMode, ArticleSourcePlatform, ArticleState } from "./types";
 

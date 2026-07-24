@@ -6,6 +6,7 @@
  * retries, background refetching, mutations, and invalidation.
  */
 import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query";
+import { usePrivy } from "@privy-io/react-auth";
 import { RubiconError, toUserFacingRubiconError, type RubiconClient } from "./client";
 import { getSupabasePublicKeyIssue, useRubiconClient } from "./auth";
 
@@ -39,8 +40,9 @@ export function useRubiconQuery<T>(
 ): QueryResult<T> {
   const enabled = options.enabled ?? true;
   const client = useRubiconClient();
+  const { user } = usePrivy();
   const query = useQuery<T, RubiconError>({
-    queryKey: ["rubicon", ...options.queryKey, ...deps],
+    queryKey: ["rubicon", user?.id ?? "anonymous", ...options.queryKey, ...deps],
     enabled,
     queryFn: async () => {
       if (!client) throw notConfiguredError();

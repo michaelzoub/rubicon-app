@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
     "test:e2e": "playwright test"
@@ -37,6 +38,7 @@
     "next": "^15.3.3",
     "ox": "^0.14.27",
     "papaparse": "^5.5.4",
+    "pg": "^8.22.0",
     "posthog-js": "^1.393.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -52,6 +54,7 @@
     "@types/howler": "^2.2.13",
     "@types/node": "^22.15.31",
     "@types/papaparse": "^5.5.2",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19.0.12",
     "@types/react-dom": "^19.0.4",
     "@types/turndown": "^5.0.6",

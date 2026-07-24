@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import posthog from "posthog-js";
 import {
+  ArrowLeft,
   BookOpen,
   FileText,
   LayoutDashboard,
@@ -19,9 +20,8 @@ import {
 import { type ReactNode, useEffect, useState } from "react";
 import { usePrivyConfigured } from "../../providers";
 import { RubiconBrand } from "../../_components/rubicon-brand";
-import { OnboardingEntryScreen } from "./substack-onboarding-dialog";
 import { WriterAuthSubstackCard } from "./writer-auth-substack-card";
-import { DashboardPageSkeleton } from "./ui";
+import { DashboardLoadingScreen, DashboardPageSkeleton } from "./ui";
 import {
   hasSeenWriterObjectionPrompt,
   markWriterObjectionPromptSeen,
@@ -66,7 +66,7 @@ function AuthGate({ children }: { children: ReactNode }) {
     // dashboard chrome until that decision is known, otherwise new writers see
     // the wrong product state flash before onboarding opens.
     if (pathname === "/dashboard" || pathname === "/dashboard-newuser") {
-      return <OnboardingEntryScreen />;
+      return <DashboardLoadingScreen />;
     }
     return (
       <DashboardFrame identity="Writer">
@@ -76,6 +76,11 @@ function AuthGate({ children }: { children: ReactNode }) {
   }
 
   if (!authenticated) return <WriterAuthScreen onLogin={login} />;
+
+  // Developer docs intentionally use their own reading-focused chrome. Keeping
+  // this decision here preserves the existing /dashboard/docs route while
+  // preventing the creator dashboard sidebar from leaking into documentation.
+  if (pathname.startsWith("/dashboard/docs")) return <>{children}</>;
 
   return <Layout>{children}</Layout>;
 }
@@ -108,10 +113,10 @@ export function WriterAuthScreen({ onLogin, demo = false }: { onLogin: () => voi
         <section className="writer-auth-panel" aria-label="Sign in">
           <button
             type="button"
-            className="writer-auth-back"
+            className="writer-auth-back inline-flex items-center gap-1.5"
             onClick={handleBackToRubicon}
           >
-            ← Back to Rubicon
+            <ArrowLeft size={15} strokeWidth={1.8} aria-hidden="true" /> Back to Rubicon
           </button>
           <div className="writer-auth-signin">
             <h2>Start listing on Rubicon</h2>
@@ -333,25 +338,25 @@ function MobileBar({ onLogout, activePath }: { onLogout?: () => void; activePath
   const pathname = usePathname();
   const currentPath = activePath ?? pathname;
   return (
-    <div className="sticky top-0 z-30 border-b border-[var(--line)] bg-white/90 backdrop-blur lg:hidden">
+    <div className="dashboard-mobile-bar sticky top-0 z-30 border-b border-[var(--line)] bg-white/90 backdrop-blur lg:hidden">
       <div className="flex items-center justify-between px-5 py-3">
         <a href="https://rubiconpay.xyz" className="flex items-center" aria-label="Rubicon home">
           <RubiconBrand className="h-7" onLight src="/w_logo.svg" />
         </a>
         {onLogout && (
-          <button type="button" onClick={onLogout} className="text-[var(--muted)]" aria-label="Sign out">
+          <button type="button" onClick={onLogout} className="dashboard-icon-button text-[var(--muted)]" aria-label="Sign out">
             <LogOut size={18} aria-hidden="true" />
           </button>
         )}
       </div>
-      <nav className="flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Dashboard">
+      <nav className="dashboard-mobile-nav flex gap-1 overflow-x-auto px-3 pb-2" aria-label="Dashboard">
         {navSections.flatMap((section) => section.items).map((item) => {
           const active = item.exact ? currentPath === item.href : currentPath.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
+              className={`inline-flex min-h-10 items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium ${
                 active ? "bg-[var(--surface-muted)] text-[var(--ink)]" : "text-[var(--muted)]"
               }`}
             >

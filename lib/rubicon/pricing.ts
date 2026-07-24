@@ -22,9 +22,15 @@ export function usdToAtomic(usd: number): string {
 /** Convert atomic USDC units (string) to a dollar number. */
 export function atomicToUsd(atomic: string | null | undefined): number {
   if (!atomic) return 0;
-  const n = Number(atomic);
-  if (!Number.isFinite(n)) return 0;
-  return n / ATOMIC_PER_USDC;
+  try {
+    const value = BigInt(atomic);
+    const maximum = BigInt(Number.MAX_SAFE_INTEGER) * BigInt(ATOMIC_PER_USDC);
+    if (value > maximum) return Number.MAX_SAFE_INTEGER;
+    if (value < -maximum) return -Number.MAX_SAFE_INTEGER;
+    return Number(value) / ATOMIC_PER_USDC;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -44,7 +50,7 @@ export function formatUsdNumber(usd: number): string {
  * at least 2 decimals and trimming any trailing zeros beyond that.
  */
 export function formatUsd(atomic: string | null | undefined): string {
-  return formatUsdNumber(atomicToUsd(atomic));
+  return formatAtomicUsd(atomic);
 }
 
 /**
@@ -66,7 +72,17 @@ export function formatUsdDisplay(usd: number): string {
 
 /** Atomic-units convenience wrapper around {@link formatUsdDisplay}. */
 export function formatUsdAtomicDisplay(atomic: string | null | undefined): string {
-  return formatUsdDisplay(atomicToUsd(atomic));
+  const value = parseAtomic(atomic);
+  if (value === null || value === BigInt(0)) return "$0.00";
+  const negative = value < BigInt(0);
+  const absolute = negative ? -value : value;
+  if (absolute >= BigInt(ATOMIC_PER_USDC)) return formatAtomicUsd(atomic);
+
+  // One cent is 10,000 atomic USDC units, leaving four exact decimal places
+  // when sub-dollar values are rendered as cents.
+  const wholeCents = absolute / BigInt(10_000);
+  const fraction = trimFraction((absolute % BigInt(10_000)).toString().padStart(4, "0"), 2);
+  return `${negative ? "-" : ""}${wholeCents.toString()}.${fraction}¢`;
 }
 
 /** Convert a creator's "price per 1,000 words" (USD) to atomic-per-word. */
@@ -83,9 +99,38 @@ export function atomicPerWordToPer1000Usd(atomicPerWord: string): number {
 
 /** Multiply an atomic per-word price by a word count → atomic total (string). */
 export function atomicForWords(atomicPerWord: string, words: number): string {
-  const n = Number(atomicPerWord);
-  if (!Number.isFinite(n) || words <= 0) return "0";
-  return Math.round(n * words).toString();
+  if (!Number.isSafeInteger(words) || words <= 0) return "0";
+  try {
+    const value = BigInt(atomicPerWord);
+    return value < BigInt(0) ? "0" : (value * BigInt(words)).toString();
+  } catch {
+    return "0";
+  }
+}
+
+function parseAtomic(atomic: string | null | undefined): bigint | null {
+  if (!atomic || !/^-?\d+$/.test(atomic)) return null;
+  try {
+    return BigInt(atomic);
+  } catch {
+    return null;
+  }
+}
+
+function formatAtomicUsd(atomic: string | null | undefined): string {
+  const value = parseAtomic(atomic);
+  if (value === null || value === BigInt(0)) return "$0.00";
+  const negative = value < BigInt(0);
+  const absolute = negative ? -value : value;
+  const whole = absolute / BigInt(ATOMIC_PER_USDC);
+  const fraction = trimFraction((absolute % BigInt(ATOMIC_PER_USDC)).toString().padStart(USDC_DECIMALS, "0"), 2);
+  return `${negative ? "-" : ""}$${whole.toString()}.${fraction}`;
+}
+
+function trimFraction(value: string, minimumDigits: number): string {
+  let end = value.length;
+  while (end > minimumDigits && value[end - 1] === "0") end -= 1;
+  return value.slice(0, end);
 }
 
 /**

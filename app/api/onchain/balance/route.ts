@@ -1,12 +1,17 @@
-import { createPublicClient, formatUnits, http, isAddress } from "viem";
+import { createPublicClient, fallback, formatUnits, http, isAddress } from "viem";
 import { NextResponse } from "next/server";
 import { ACTIVE_CHAIN } from "@/lib/chain";
 
 export const runtime = "nodejs";
 
-// Prefer the Canteen RPC (carries a secret token, server-only). Fall back to the
-// chain's public RPC so balances still load if ARC_RPC_URL isn't configured.
-const transport = http(process.env.ARC_RPC_URL || undefined);
+// Prefer the Canteen RPC (carries a secret token, server-only), but retain the
+// chain's public endpoints as actual failover transports. A preview deployment
+// can otherwise show an unavailable balance whenever its ARC_RPC_URL is stale.
+const rpcUrls = [
+  ...(process.env.ARC_RPC_URL ? [process.env.ARC_RPC_URL] : []),
+  ...ACTIVE_CHAIN.rpcUrls.default.http,
+];
+const transport = fallback([...new Set(rpcUrls)].map((url) => http(url)), { rank: false });
 const publicClient = createPublicClient({ chain: ACTIVE_CHAIN, transport });
 
 export async function GET(request: Request) {

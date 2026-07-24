@@ -1,13 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { AlertTriangle, Inbox, Loader2, LogIn, RefreshCw } from "lucide-react";
+import Image from "next/image";
+import { AlertTriangle, Inbox, Loader2, LogIn, Minus, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { RubiconError } from "@/lib/rubicon/client";
-import type { ArticleState, PaymentStatus } from "@/lib/rubicon/types";
+import type { ArticleState } from "@/lib/rubicon/types";
+import type { AnalyticsSettlementStatus } from "@/lib/analytics/types";
 import { ARTICLE_STATE_LABELS } from "@/lib/rubicon/types";
 
 /* ---------- layout ---------- */
+
+/** Stable auth/data loading surface shared by dashboard entry points. */
+export function DashboardLoadingScreen() {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-white" role="status" aria-label="Loading Rubicon">
+      <Image src="/w_logo.png" alt="" width={52} height={52} priority />
+    </div>
+  );
+}
 
 export function PageHeader({
   title,
@@ -21,7 +32,7 @@ export function PageHeader({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 className="text-2xl font-semibold tracking-[-0.025em] sm:text-[1.65rem]">{title}</h1>
+        <h1 className="text-[1.35rem] font-semibold tracking-[-0.025em] sm:text-[1.5rem]">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-sm leading-6 text-[var(--muted)]">{description}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
@@ -49,10 +60,46 @@ export function Card({
 
 export function CardHeader({ title, action }: { title: ReactNode; action?: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-[var(--line)] px-4 py-3">
-      <h2 className="text-base font-semibold">{title}</h2>
+    <div className="flex items-center justify-between gap-3 px-4 pb-2 pt-3.5">
+      <h2 className="dashboard-panel-title">{title}</h2>
       {action}
     </div>
+  );
+}
+
+export const DashboardPanel = Card;
+export const PanelHeader = CardHeader;
+
+export function MetricTrend({
+  value,
+  label = "vs last week",
+  onDark = false,
+  compact = true,
+}: {
+  value: number | null;
+  label?: string;
+  onDark?: boolean;
+  compact?: boolean;
+}) {
+  const neutral = value === null || Math.abs(value) < 1;
+  const positive = value !== null && value >= 1;
+  const Icon = neutral ? Minus : positive ? TrendingUp : TrendingDown;
+  const tone = onDark
+    ? neutral ? "text-white/55" : positive ? "text-[var(--gain-on-dark)]" : "text-[var(--loss-on-dark)]"
+    : neutral
+      ? "text-[#85858d]"
+      : positive
+        ? "text-[#74a888]"
+        : "text-[#c98a83]";
+  const valueLabel = neutral || value === null ? "Flat" : `${value > 0 ? "+" : "−"}${Math.abs(Math.round(value))}%`;
+
+  return (
+    <span className={`inline-flex shrink-0 items-center justify-end gap-1 font-medium tabular-nums ${compact ? "text-[0.7rem]" : "text-xs"} ${tone}`}>
+      <span>{valueLabel}</span>
+      <Icon size={compact ? 13 : 14} strokeWidth={1.8} aria-hidden="true" />
+      {!compact && <span className="font-normal">{label}</span>}
+      <span className="sr-only">{label}</span>
+    </span>
   );
 }
 
@@ -60,31 +107,46 @@ export function StatTile({
   label,
   value,
   hint,
+  context,
   featured = false,
   sparkline,
+  quietLabel = false,
+  compact = false,
 }: {
   label: string;
   value: ReactNode;
   hint?: ReactNode;
+  context?: ReactNode;
   featured?: boolean;
   sparkline?: ReactNode;
+  quietLabel?: boolean;
+  compact?: boolean;
 }) {
   return (
     <Card
-      className={`grid h-full min-h-[104px] grid-rows-[1.65rem_1fr_auto] p-3.5 ${featured ? "text-white" : ""}`}
+      className={`relative isolate grid h-full grid-rows-[auto_1fr_auto] overflow-hidden ${compact ? "min-h-[92px] p-3.5" : "min-h-[116px] p-4"} ${featured ? "text-white" : ""}`}
       style={featured ? { background: "var(--tile-featured)", borderColor: "transparent" } : undefined}
     >
+      {sparkline && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[78%] overflow-hidden opacity-[0.16]" aria-hidden="true">
+          {sparkline}
+        </div>
+      )}
       <div
-        className={`mono flex items-start text-[0.65rem] uppercase leading-4 tracking-[0.1em] ${
-          featured ? "text-white/55" : "text-[var(--muted)]"
+        className={`relative z-10 flex items-start text-[0.76rem] font-medium leading-4 ${
+          featured ? "text-white/55" : quietLabel ? "text-[var(--quiet)]" : "text-[var(--muted)]"
         }`}
       >
         {label}
       </div>
-      <div className="flex items-center text-[1.45rem] font-semibold leading-none tracking-[-0.025em] tabular-nums">{value}</div>
-      <div className="mt-1">
-        {hint && <div className="text-xs">{hint}</div>}
-        {sparkline && <div className="mt-1">{sparkline}</div>}
+      <div className={`relative z-10 flex items-start text-[1.55rem] font-semibold leading-none tracking-[-0.035em] tabular-nums ${compact ? "pt-2" : "pt-2.5"}`}>{value}</div>
+      <div className={`relative z-10 ${compact ? "mt-2" : "mt-4"}`}>
+        {(hint || context) && (
+          <div className="mono flex min-w-0 items-center justify-between gap-2 text-[0.66rem] leading-4">
+            {context && <span className={`truncate ${featured ? "text-white/45" : "text-[var(--quiet)]"}`}>{context}</span>}
+            <span className="ml-auto">{hint}</span>
+          </div>
+        )}
       </div>
     </Card>
   );
@@ -117,7 +179,7 @@ export function LoadingState({ label = "Loading…" }: { label?: string }) {
       </div>
       <div className="grid gap-3">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="flex items-center justify-between gap-5 border-t border-[var(--line)] pt-3 first:border-t-0 first:pt-0">
+          <div key={index} className="flex items-center justify-between gap-5 rounded-lg bg-[var(--surface-muted)] px-3 py-2.5">
             <div className="grid flex-1 gap-2">
               <Skeleton className={`h-3.5 ${index % 2 === 0 ? "w-2/5" : "w-1/3"}`} />
               <Skeleton className={`h-3 ${index % 2 === 0 ? "w-3/5" : "w-1/2"}`} />
@@ -220,7 +282,7 @@ export function SafetyWarning({
       className="flex items-start gap-3 rounded-xl border border-[#efcbc8] bg-[#fde4e2] px-4 py-3.5 text-sm text-[#8d2f2d]"
     >
       <span className="relative mt-1 flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#d4302b] opacity-75" />
+        <span className="absolute inline-flex h-full w-full motion-safe:animate-ping rounded-full bg-[#d4302b] opacity-75" />
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[#c5221c]" />
       </span>
       <div className="grid gap-1">
@@ -266,16 +328,19 @@ export function ArticleStatePill({ state }: { state: ArticleState }) {
   );
 }
 
-const paymentStyles: Record<PaymentStatus, string> = {
-  settled: "bg-[#dff5e9] text-[#176342]",
+const paymentStyles: Record<AnalyticsSettlementStatus, string> = {
+  not_applicable: "bg-[#eceef4] text-[#5f6470]",
   pending: "bg-[#fff0d5] text-[#80520f]",
+  confirmed: "bg-[#e8f6ef] text-[#176342]",
+  completed: "bg-[#dff5e9] text-[#176342]",
   failed: "bg-[#fde4e2] text-[#963b37]",
 };
 
-export function PaymentStatusPill({ status }: { status: PaymentStatus }) {
+export function PaymentStatusPill({ status }: { status: AnalyticsSettlementStatus }) {
+  const label = status === "not_applicable" ? "Free" : status[0].toUpperCase() + status.slice(1);
   return (
-    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold capitalize ${paymentStyles[status]}`}>
-      {status}
+    <span className={`inline-flex items-center rounded-md px-2.5 py-1 text-xs font-semibold ${paymentStyles[status]}`}>
+      {label}
     </span>
   );
 }

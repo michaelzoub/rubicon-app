@@ -2,6 +2,7 @@
 
 import { Activity } from "lucide-react";
 import { useRubiconQuery } from "@/lib/rubicon/hooks";
+import { useAnalyticsOverview } from "@/lib/analytics/hooks";
 import { formatUsd } from "@/lib/rubicon/pricing";
 import {
   Card,
@@ -18,25 +19,34 @@ import {
 } from "../_components/ui";
 
 export default function EarningsPage() {
-  const earnings = useRubiconQuery((c) => c.getEarnings(), [], { queryKey: ["earnings"] });
+  const analytics = useAnalyticsOverview();
   const wallet = useRubiconQuery((c) => c.getWallet(), [], { queryKey: ["wallet"] });
-  const activity = useRubiconQuery((c) => c.getPaymentActivity(), [], { queryKey: ["payment-activity"] });
 
   return (
-    <div className="grid gap-6">
+    <div className="grid gap-5">
       <PageHeader
         title="Earnings"
         description="Payments are routed straight to your receiving wallet. Rubicon never holds your funds."
       />
 
-      {earnings.status === "loading" && <LoadingState />}
-      {earnings.status === "error" && earnings.error && <ErrorState error={earnings.error} onRetry={earnings.refetch} />}
+      {analytics.isPending && !analytics.data && <LoadingState />}
+      {analytics.error && !analytics.data && <ErrorState error={analytics.error} onRetry={() => void analytics.refetch()} />}
+      {analytics.data && analytics.error && (
+        <div className="rounded-lg border border-[#eddcbd] bg-[#fdf9f1] px-4 py-3 text-sm text-[#7b4e12]" role="status">
+          Couldn’t refresh analytics. Showing the last successful response.
+        </div>
+      )}
+      {analytics.data && !analytics.error && analytics.data.freshness.stale && (
+        <div className="rounded-lg border border-[var(--line)] bg-[var(--surface-muted)] px-4 py-3 text-sm text-[var(--muted)]" role="status">
+          Analytics are delayed. Recent reads and settlements may not appear yet.
+        </div>
+      )}
 
-      {earnings.status === "success" && (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <StatTile label="Settled earnings" value={formatUsd(earnings.data?.settledEarnings)} />
-          <StatTile label="Words paid for" value={(earnings.data?.wordsPaidFor ?? 0).toLocaleString()} />
-          <StatTile label="Agent reads" value={(earnings.data?.agentReads ?? 0).toLocaleString()} />
+      {analytics.data && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatTile label="Completed earnings" value={formatUsd(analytics.data.totals.settledCreatorAmountAtomic)} />
+          <StatTile label="Pending earnings" value={formatUsd(analytics.data.totals.pendingCreatorAmountAtomic)} />
+          <StatTile label="Agent reads" value={analytics.data.totals.agentReads.toLocaleString()} />
         </div>
       )}
 
@@ -59,9 +69,8 @@ export default function EarningsPage() {
 
       <Card>
         <CardHeader title="Payment activity" />
-        {activity.status === "loading" && <div className="p-5"><LoadingState /></div>}
-        {activity.status === "error" && activity.error && <div className="p-5"><ErrorState error={activity.error} onRetry={activity.refetch} /></div>}
-        {activity.status === "success" && (activity.data?.length ?? 0) === 0 && (
+        {analytics.isPending && <div className="p-5"><LoadingState /></div>}
+        {analytics.data && analytics.data.recentReads.length === 0 && (
           <div className="p-5">
             <EmptyState
               icon={<Activity size={22} aria-hidden="true" />}
@@ -70,32 +79,28 @@ export default function EarningsPage() {
             />
           </div>
         )}
-        {activity.status === "success" && (activity.data?.length ?? 0) > 0 && (
+        {analytics.data && analytics.data.recentReads.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-[0.08em] text-[var(--muted)]">
+              <thead className="border-b border-[var(--line)]">
+                <tr className="text-left text-[0.625rem] font-medium uppercase tracking-[0.08em] text-[var(--quiet)]">
                   <th className="px-5 py-3 font-medium">Date</th>
                   <th className="px-5 py-3 font-medium">Article</th>
                   <th className="px-5 py-3 font-medium">Words read</th>
                   <th className="px-5 py-3 font-medium">Gross</th>
-                  <th className="px-5 py-3 font-medium">Rubicon fee</th>
                   <th className="px-5 py-3 font-medium">You earn</th>
                   <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Settlement</th>
                 </tr>
               </thead>
               <tbody>
-                {activity.data!.map((row) => (
-                  <tr key={row.id} className="transition-colors hover:bg-[var(--surface-muted)]">
-                    <td className="px-5 py-3 whitespace-nowrap">{formatDate(row.date)}</td>
+                {analytics.data.recentReads.map((row) => (
+                  <tr key={row.bundleId} className="border-t border-[var(--line)] transition-colors hover:bg-[var(--surface-muted)]">
+                    <td className="px-5 py-3 whitespace-nowrap">{formatDate(row.occurredAt)}</td>
                     <td className="px-5 py-3"><span className="block max-w-[200px] truncate">{row.articleTitle}</span></td>
-                    <td className="px-5 py-3">{row.wordsRead.toLocaleString()}</td>
-                    <td className="px-5 py-3">{formatUsd(row.grossAmount)}</td>
-                    <td className="px-5 py-3 text-[var(--muted)]">$0</td>
-                    <td className="px-5 py-3 font-medium">{formatUsd(row.creatorAmount)}</td>
-                    <td className="px-5 py-3"><PaymentStatusPill status={row.status} /></td>
-                    <td className="px-5 py-3 mono text-xs text-[var(--muted)]">{row.settlementReference ?? "—"}</td>
+                    <td className="px-5 py-3 tabular-nums">{row.wordsRead.toLocaleString()}</td>
+                    <td className="px-5 py-3 tabular-nums">{formatUsd(row.creatorAmountAtomic)}</td>
+                    <td className="px-5 py-3 font-medium tabular-nums">{formatUsd(row.settledCreatorAmountAtomic)}</td>
+                    <td className="px-5 py-3"><PaymentStatusPill status={row.settlementStatus} /></td>
                   </tr>
                 ))}
               </tbody>
