@@ -27,6 +27,7 @@ import type { ArticleAccessMode, ArticleSourceInput, ArticleSectionInput } from 
 import { isStolenXContent, normalizeHandle } from "@/lib/articles/ownership";
 import { OTHER_IMPORT_GROUP, PLATFORM_IMPORT_OPTIONS } from "@/lib/import/options";
 import { MarkdownEditor } from "../../_components/markdown-editor";
+import { DashboardDialog } from "../../_components/overlays";
 import { Card, formatDate, PageHeader, SafetyWarning, shortWallet, WalletStatePill } from "../../_components/ui";
 import { takeImport } from "../_import-handoff";
 import { SuccessCelebration, useSuccessCelebration } from "../../_components/success-celebration";
@@ -407,6 +408,7 @@ function StepAddArticle({
   onNext: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [importPickerOpen, setImportPickerOpen] = useState(false);
   const titleRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -464,45 +466,27 @@ function StepAddArticle({
 
         <section className="grid gap-3" aria-label="Import article">
           <span className="text-sm font-semibold">{OTHER_IMPORT_GROUP.heading}</span>
-          <div className="flex flex-wrap gap-2">
-            {PLATFORM_IMPORT_OPTIONS.map((option) => (
-              <Link key={option.id} href={option.href} className="button button-secondary text-sm">
-                {option.logoSrc && (
-                  <Image src={option.logoSrc} alt="" width={15} height={15} aria-hidden="true" />
-                )}{" "}
-                {option.label}
-              </Link>
-            ))}
-            {OTHER_IMPORT_GROUP.options.map((option) =>
-              option.id === "markdown" ? (
-                <button
-                  key={option.id}
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="button button-secondary text-sm"
-                >
-                  <FileText size={15} aria-hidden="true" /> {option.label}
-                </button>
-              ) : (
-                !source && (
-                  <Link key={option.id} href={option.href} className="button button-primary text-sm">
-                    <Link2 size={15} aria-hidden="true" /> {option.label}
-                  </Link>
-                )
-              ),
-            )}
-            <a
-              href="https://chromewebstore.google.com/detail/rubicon/allmdpfkdgdcjfgeijembjfpnkfpocab"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="button button-secondary text-sm"
-            >
-              <Puzzle size={15} aria-hidden="true" /> Chrome extension
-            </a>
-          </div>
+          <button
+            type="button"
+            onClick={() => setImportPickerOpen(true)}
+            className="button button-primary w-fit text-sm"
+            aria-haspopup="dialog"
+            aria-expanded={importPickerOpen}
+          >
+            <FileText size={15} aria-hidden="true" /> Choose an import source
+          </button>
         </section>
 
         <input ref={fileRef} type="file" accept=".md,.markdown,.txt" onChange={onUpload} className="hidden" />
+
+        <ImportSourcePicker
+          open={importPickerOpen}
+          onClose={() => setImportPickerOpen(false)}
+          onSelectMarkdown={() => {
+            setImportPickerOpen(false);
+            fileRef.current?.click();
+          }}
+        />
 
         <div className="substack-compose-divider" aria-hidden="true">
           <span />
@@ -540,6 +524,68 @@ function StepAddArticle({
         </section>
       </main>
     </div>
+  );
+}
+
+function ImportSourcePicker({
+  open,
+  onClose,
+  onSelectMarkdown,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onSelectMarkdown: () => void;
+}) {
+  const cardClass =
+    "relative grid min-h-36 place-content-center justify-items-center gap-3 rounded-lg border-2 border-transparent bg-[var(--surface-muted)] p-4 text-center transition-[background-color,border-color,transform] duration-150 ease-out hover:bg-[var(--hovered)] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ink)]";
+
+  return (
+    <DashboardDialog open={open} onClose={onClose} labelledBy="import-source-title" className="max-w-2xl p-6 sm:p-8">
+      <div className="text-center">
+        <p className="text-xs font-medium text-[var(--quiet)]">Import an existing article</p>
+        <h2 id="import-source-title" className="mt-2 text-2xl font-semibold tracking-[-0.02em]">
+          Where would you like to import from?
+        </h2>
+        <p className="mt-2 text-sm text-[var(--muted)]">Choose a source to continue with its import flow.</p>
+      </div>
+
+      <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {PLATFORM_IMPORT_OPTIONS.map((option) => (
+          <Link key={option.id} href={option.href} onClick={onClose} className={cardClass}>
+            {option.logoSrc && <Image src={option.logoSrc} alt="" width={40} height={40} className="rounded-md" />}
+            <span className="text-sm font-medium">{option.platformLabel}</span>
+          </Link>
+        ))}
+        <Link href={OTHER_IMPORT_GROUP.options[0].href} onClick={onClose} className={cardClass}>
+          <span className="grid h-10 w-10 place-items-center rounded-md bg-white text-[var(--muted)]" aria-hidden="true">
+            <Link2 size={20} strokeWidth={1.75} />
+          </span>
+          <span className="text-sm font-medium">Import URL</span>
+        </Link>
+        <button type="button" onClick={onSelectMarkdown} className={cardClass}>
+          <span className="grid h-10 w-10 place-items-center rounded-md bg-white text-[var(--muted)]" aria-hidden="true">
+            <FileText size={20} strokeWidth={1.75} />
+          </span>
+          <span className="text-sm font-medium">Import Markdown</span>
+        </button>
+        <a
+          href="https://chromewebstore.google.com/detail/rubicon/allmdpfkdgdcjfgeijembjfpnkfpocab"
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onClose}
+          className={cardClass}
+        >
+          <span className="grid h-10 w-10 place-items-center rounded-md bg-white text-[var(--muted)]" aria-hidden="true">
+            <Puzzle size={20} strokeWidth={1.75} />
+          </span>
+          <span className="text-sm font-medium">Chrome extension</span>
+        </a>
+      </div>
+
+      <button type="button" onClick={onClose} className="button button-secondary mt-6 w-full justify-center text-sm">
+        Cancel
+      </button>
+    </DashboardDialog>
   );
 }
 

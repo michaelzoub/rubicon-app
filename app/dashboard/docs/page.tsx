@@ -4,6 +4,7 @@ import { Check, ChevronRight, Copy, ExternalLink, Menu, Search, ShieldCheck, X }
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RubiconBrand } from "@/app/_components/rubicon-brand";
+import { CopyConfetti } from "../_components/copy-confetti";
 
 const npmBase = "https://www.npmjs.com/package";
 const githubUrl = "https://github.com/michaelzoub/rubicon";
@@ -81,7 +82,7 @@ function CodeBlock({ label, children }: { label: string; children: string }) {
   }
   const tokens = children.split(/(\/\/.*$|`[^`]*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b(?:import|from|const|new|await|for|if|in|as|type|return)\b|\b\d+n?\b)/gm);
   const tone = (token: string) => token.startsWith("//") ? "comment" : (/^[`"']/.test(token) ? "string" : (/^\d/.test(token) ? "number" : (/^(import|from|const|new|await|for|if|in|as|type|return)$/.test(token) ? "keyword" : "")));
-  return <div className="rubicon-docs-code"><div className="rubicon-docs-code-head"><span>{label}</span><button type="button" onClick={copy} aria-label="Copy code">{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : "Copy"}</button></div><pre><code>{tokens.map((token, index) => <span key={index} className={tone(token)}>{token}</span>)}</code></pre></div>;
+  return <div className="rubicon-docs-code"><div className="rubicon-docs-code-head"><span>{label}</span><CopyConfetti onCopy={copy}><span aria-label="Copy code">{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copied" : "Copy"}</span></CopyConfetti></div><pre><code>{tokens.map((token, index) => <span key={index} className={tone(token)}>{token}</span>)}</code></pre></div>;
 }
 
 function Resource({ name, description }: { name: string; description: string }) {

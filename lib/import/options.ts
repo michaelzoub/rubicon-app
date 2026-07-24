@@ -30,7 +30,10 @@ export const PLATFORM_IMPORT_OPTIONS: ImportOption[] = [
     label: "Import from Substack",
     platformLabel: "Substack",
     logoSrc: "/substacklogo.png",
-    href: "/dashboard/import/substack",
+    // A single post follows the same URL → editable-draft review as X and
+    // Artemis. The archive ZIP importer remains available as a distinct bulk
+    // import action from the dashboard.
+    href: "/dashboard/articles/import?source=substack",
   },
   {
     id: "artemis",
@@ -39,7 +42,7 @@ export const PLATFORM_IMPORT_OPTIONS: ImportOption[] = [
     logoSrc: "/artemislogo.png",
     // Artemis posts are imported by pasting the article URL — the generic
     // URL importer detects and parses them (unlike Substack's ZIP flow).
-    href: "/dashboard/articles/import",
+    href: "/dashboard/articles/import?source=artemis",
   },
   {
     id: "x",
@@ -48,7 +51,7 @@ export const PLATFORM_IMPORT_OPTIONS: ImportOption[] = [
     logoSrc: "/xlogo.svg",
     // X Articles are imported by their tweet URL — onboarding lists a writer's
     // Articles, and the generic URL importer detects and parses each one.
-    href: "/dashboard/articles/import",
+    href: "/dashboard/articles/import?source=x",
   },
 ];
 

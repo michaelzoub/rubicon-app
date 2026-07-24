@@ -24,6 +24,7 @@ import { RubiconBrand } from "../../_components/rubicon-brand";
 import { ChartEmptyState, CountUp, Donut, Sparkline, TrendChart, type DonutSlice, type TrendBar } from "./charts";
 import { DashboardDialog } from "./overlays";
 import { SuccessCelebration, useSuccessCelebration } from "./success-celebration";
+import { CopyConfetti } from "./copy-confetti";
 import {
   Card,
   CardHeader,
@@ -340,7 +341,7 @@ function TopArticlesPodium({ articles }: { articles: NonNullable<DashboardOvervi
   const runners = ranked.slice(3, 6);
   const podiumOrder = leaders.length === 3 ? [leaders[1], leaders[0], leaders[2]] : leaders.length === 2 ? [leaders[1], leaders[0]] : leaders;
   const podiumGridClass = leaders.length === 1
-    ? "mx-auto w-full max-w-32 grid-cols-1"
+    ? "mx-auto w-full max-w-lg grid-cols-1"
     : leaders.length === 2
       ? "mx-auto w-full max-w-64 grid-cols-2"
       : "grid-cols-3";
@@ -352,7 +353,7 @@ function TopArticlesPodium({ articles }: { articles: NonNullable<DashboardOvervi
         <h2 className="dashboard-panel-title">Top articles</h2>
         <span className="dashboard-meta">Ranked by earnings</span>
       </div>
-      <ol className={`mt-4 grid items-stretch gap-1.5 sm:gap-2 ${podiumGridClass}`} aria-label="Top three articles">
+      <ol className={`mt-4 grid items-stretch gap-1.5 sm:gap-2 ${runners.length === 0 ? "flex-1 content-center" : ""} ${podiumGridClass}`} aria-label="Top three articles">
         {podiumOrder.map((article) => {
           const rank = leaders.indexOf(article);
           const style = PODIUM_STYLES[rank] ?? PODIUM_STYLES[2];
@@ -476,7 +477,7 @@ function MoneyActivityChart({ bars }: { bars: TrendBar[] }) {
           <div className="dashboard-meta">{paidDays} paid days</div>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
+        <div className="flex min-h-0 flex-1 px-3 pb-3 pt-3 sm:px-4 sm:pb-4">
         {hasMeaningfulData ? (
           <TrendChart bars={bars} formatValue={formatUsdDisplay} height="100%" />
         ) : (
@@ -767,7 +768,7 @@ function PayoutConnectionDetails({ wallet }: { wallet: DashboardOverviewWallet }
           <div className="text-xs font-medium text-[var(--muted)]">Wallet address</div>
           <div className="mt-2 flex items-center gap-2">
             <span className="mono text-sm font-medium">{wallet.addressLabel ?? shortWallet(wallet.address)}</span>
-            {wallet.onCopy && <button type="button" onClick={wallet.onCopy} className="text-[var(--muted)] transition-colors hover:text-[var(--ink)]" aria-label="Copy address"><Copy size={14} aria-hidden="true" /></button>}
+            {wallet.onCopy && <CopyConfetti onCopy={wallet.onCopy} className="text-[var(--muted)] transition-colors hover:text-[var(--ink)]" ariaLabel="Copy address"><Copy size={14} aria-hidden="true" /></CopyConfetti>}
             {wallet.copied && <span className="text-xs text-[var(--green)]">copied</span>}
           </div>
           {wallet.explorerHref && <a href={wallet.explorerHref} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--ink)] hover:underline">View on {wallet.explorerLabel ?? "explorer"} <ExternalLink size={11} aria-hidden="true" /></a>}

@@ -1,19 +1,3 @@
-# Agent instructions
+Set up the Rubicon skill from [https://rubicon.rubiconpay.xyz/skill.md](https://rubicon.rubiconpay.xyz/skill.md). Find and summarize an article that answers this question: “What does the author identify as the main limitation preventing AGI, and why might better training or deployment environments matter more than simply scaling compute?” Use Rubicon’s supported buyer-wallet funding flow if required, spend no more than 0.01 USDC cumulatively.
 
-Before making code changes, read:
-
-`.agents/skills/project-map/SKILL.md`
-
-Use it as the repo orientation map.
-
-Update the project map whenever your change:
-
-- adds, removes, or renames important routes, commands, packages, or entrypoints
-- changes auth, analytics, payments, imports, API, database, or dashboard architecture
-- moves shared components or shared libraries
-- introduces or removes major dependencies
-- deprecates important files
-- changes build, test, lint, or dev commands
-- performs a big refactor
-
-Keep the map concise and accurate. Do not turn it into a full implementation log.
+Afterwards can you fix the hero regression? Another agent made some updates to some buttons but the button is kinda glitchy and clips. Make sure once it's fixed that the header buttons are the same as the hero buttons. Afterwards make sure that buttons that are copyable emit a confetti animation similar to the Rubicon app repository.

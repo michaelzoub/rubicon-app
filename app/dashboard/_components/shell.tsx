@@ -295,7 +295,6 @@ function Sidebar({
             <Link href="/dashboard/articles/new" className="dashboard-nav-link">
               <Plus size={17} aria-hidden="true" />
               <span className="dashboard-nav-link-label">New article</span>
-              <kbd className="dashboard-kbd">⌘N</kbd>
             </Link>
 
             {navSections.map((section) => (

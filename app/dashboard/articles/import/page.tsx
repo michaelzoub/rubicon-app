@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Link2, Loader2 } from "lucide-react";
@@ -12,7 +12,7 @@ import { stashImport } from "../_import-handoff";
 type ImportErrorBody = { error?: { code?: string; message?: string } };
 
 const inputClass =
-  "h-11 w-full rounded-lg bg-[var(--surface-muted)] px-3 outline-none transition focus:bg-white focus:ring-2 focus:ring-[var(--river-line)]";
+  "url-import-field h-11 w-full rounded-lg bg-transparent px-3 outline-none";
 
 const sourceLabels: Record<string, string> = {
   substack: "Substack post detected",
@@ -20,8 +20,22 @@ const sourceLabels: Record<string, string> = {
   artemis: "Artemis article detected",
 };
 
+type PlatformSource = keyof typeof sourceLabels;
+
+function selectedPlatform(value: string | null): PlatformSource | null {
+  return value && value in sourceLabels ? value as PlatformSource : null;
+}
+
+const platformNames: Record<PlatformSource, string> = {
+  substack: "Substack",
+  x: "X",
+  artemis: "Artemis",
+};
+
 export default function ImportFromUrlPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const platform = selectedPlatform(searchParams.get("source"));
   const [url, setUrl] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,19 +72,28 @@ export default function ImportFromUrlPage() {
     }
   }
 
-  const canSubmit = url.trim() !== "" && detected !== "unsupported" && !pending;
+  const wrongPlatform = platform !== null && detected !== null && detected !== "unsupported" && detected !== platform;
+  const canSubmit = url.trim() !== "" && detected !== "unsupported" && !wrongPlatform && !pending;
+  const title = platform ? `Import from ${platformNames[platform]}` : "Import from URL";
+  const placeholder = platform === "substack"
+    ? "https://author.substack.com/p/your-post"
+    : platform === "x"
+      ? "https://x.com/author/status/123"
+      : platform === "artemis"
+        ? "https://artemis.ai/you/article/123"
+        : "https://author.substack.com/p/your-post  or  https://artemis.ai/you/article/123";
 
   return (
     <div className="grid gap-6">
       <PageHeader
-        title="Import from URL"
+        title={title}
         description="We only import the article you choose. Nothing is posted or published automatically."
       />
 
       <Card className="p-6">
         <label className="grid gap-2">
           <span className="text-sm font-medium">Post URL</span>
-          <div className="flex items-center rounded-lg bg-[var(--surface-muted)] focus-within:bg-white focus-within:ring-2 focus-within:ring-[var(--river-line)]">
+          <div className="flex items-center rounded-lg bg-[var(--surface-muted)] transition focus-within:bg-white focus-within:ring-2 focus-within:ring-[var(--river-line)]">
             <span className="pl-3 text-[var(--muted)]">
               <Link2 size={16} aria-hidden="true" />
             </span>
@@ -83,8 +106,8 @@ export default function ImportFromUrlPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && canSubmit) runImport();
               }}
-              placeholder="https://author.substack.com/p/your-post  or  https://artemis.ai/you/article/123"
-              className={`${inputClass} bg-transparent`}
+              placeholder={placeholder}
+              className={inputClass}
               inputMode="url"
               autoFocus
             />
@@ -93,7 +116,9 @@ export default function ImportFromUrlPage() {
 
         {url.trim() !== "" && (
           <p className="mt-3 text-sm">
-            {detected && detected !== "unsupported" ? (
+            {wrongPlatform ? (
+              <span className="text-[#8d2f2d]">This is a {platformNames[detected as PlatformSource]} link. Choose the matching import source.</span>
+            ) : detected && detected !== "unsupported" ? (
               <span className="text-[#165c3e]">{sourceLabels[detected]}</span>
             ) : (
               <span className="text-[var(--muted)]">

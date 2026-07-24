@@ -8,6 +8,7 @@ import { useRubiconMutation, useRubiconQuery } from "@/lib/rubicon/hooks";
 import { RECEIVING_NETWORK, RECEIVING_NETWORK_LABEL } from "@/lib/chain";
 import { Reveal } from "../_components/charts";
 import { AgentCashSettings } from "./agentcash-settings";
+import { CopyConfetti } from "../_components/copy-confetti";
 import {
   Card,
   CardHeader,
@@ -176,7 +177,7 @@ function ExtensionAccess() {
               <div className="text-sm font-medium text-[#165c3e]">Copy this token now. It will not be shown again.</div>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <code className="mono min-w-0 flex-1 break-all rounded-lg bg-white px-3 py-2 text-xs">{newToken}</code>
-                <button type="button" onClick={copyToken} className="button button-secondary text-sm">
+                <CopyConfetti onCopy={copyToken} className="button button-secondary text-sm">
                   <span className="relative inline-grid size-[15px] shrink-0 place-items-center">
                     <AnimatePresence>
                       <motion.span
@@ -192,7 +193,7 @@ function ExtensionAccess() {
                     </AnimatePresence>
                   </span>
                   {copied ? "Copied" : "Copy"}
-                </button>
+                </CopyConfetti>
               </div>
             </motion.div>
           )}

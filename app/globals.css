@@ -1047,6 +1047,12 @@ a {
   margin-inline: auto;
 }
 
+/* Keep the public landing surface proportional on wide displays without
+   changing the narrower dashboard/documentation containers. */
+.landing-page .container {
+  width: min(1440px, calc(100% - 2 * var(--landing-gutter, clamp(24px, 5vw, 48px))));
+}
+
 .section {
   padding: clamp(3.5rem, 6vw + 1.5rem, 7rem) 0;
 }
@@ -2961,6 +2967,7 @@ a {
 @media (min-width: 1024px) {
   .site-header-links {
     display: flex;
+    transform: translateX(1rem);
   }
 }
 
@@ -3009,48 +3016,6 @@ a {
   margin-left: auto;
 }
 
-.site-nav-cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 2rem;
-  padding: 0 0.625rem;
-  border: 0;
-  border-radius: 7px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-  transition:
-    background-color 200ms var(--ease-soft),
-    color 200ms var(--ease-soft),
-    transform 220ms var(--ease-out);
-}
-
-.site-nav-cta--creator {
-  height: 2.125rem;
-  padding: 0 0.75rem;
-  background: #ffffff;
-  color: #08090c;
-}
-
-.site-nav-cta--creator:hover {
-  background: #f2f4f8;
-  color: #05070a;
-  transform: translateY(-1px);
-}
-
-.site-nav-cta--sales {
-  background: rgba(255, 255, 255, 0.12);
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.site-nav-cta--sales:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-  transform: translateY(-1px);
-}
-
 @media (max-width: 520px) {
   .site-header-inner {
     gap: 0.65rem;
@@ -3073,14 +3038,14 @@ a {
   }
 
   .site-nav-cta {
-    height: 1.875rem;
-    padding: 0 0.5rem;
-    font-size: 0.6875rem;
+    min-height: 30px;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.75rem;
   }
 
   .site-nav-cta--creator {
-    height: 2rem;
-    padding: 0 0.625rem;
+    min-height: 32px;
+    padding: 0.35rem 0.65rem;
   }
 }
 
@@ -3242,11 +3207,14 @@ a {
 }
 
 .button {
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
   min-height: 32px;
+  line-height: 1.25;
+  white-space: nowrap;
   border-radius: 8px;
   padding: 0.38rem 0.7rem;
   font-size: 0.875rem;
@@ -5678,20 +5646,40 @@ a {
   }
 }
 
-.site-nav-cta { transition: transform 140ms var(--ease-out), background-color 180ms ease, border-color 180ms ease; }
+.site-nav-cta {
+  box-sizing: border-box;
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.38rem 0.7rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  white-space: nowrap;
+  transition:
+    transform 140ms var(--ease-out),
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
 .site-nav-cta:active { transform: scale(0.97); }
 .site-nav-cta--creator {
   border: 1px solid #16181d;
   background: #16181d;
   color: #fff;
 }
-.site-nav-cta--creator:hover { background: #2a2d34; color: #fff; transform: none; }
+.site-nav-cta--creator:hover { border-color: #2a2d34; background: #2a2d34; color: #fff; transform: none; }
 .site-nav-cta--sales {
   border: 1px solid rgba(20, 22, 28, 0.14);
   background: #fff;
   color: #4a4f59;
 }
-.site-nav-cta--sales:hover { background: #f3f4f6; color: #16181d; transform: none; }
+.site-nav-cta--sales:hover { border-color: rgba(20, 22, 28, 0.18); background: #f3f4f6; color: #16181d; transform: none; }
 
 .landing-page {
   --landing-bg: #fff;
@@ -5816,7 +5804,7 @@ a {
 .landing-workspace-section > span { font: .55rem var(--font-mono), monospace; }
 .landing-workspace-section.is-selected { background: #fafafa; color: #16181d; box-shadow: inset 2px 0 0 #16181d; }
 .landing-workspace-actionbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: .75rem; }
-.landing-workspace-actionbar button { display: inline-flex; min-height: 36px; align-items: center; gap: .45rem; border: 1px solid #16181d; border-radius: 7px; padding: 0 .9rem; background: #16181d; color: #fff; font-size: .68rem; font-weight: 700; transition: transform 140ms var(--ease-out), background-color 180ms ease; }
+.landing-workspace-actionbar button { box-sizing: border-box; display: inline-flex; min-height: 32px; align-items: center; justify-content: center; gap: .4rem; border: 1px solid #16181d; border-radius: 8px; padding: .38rem .7rem; background: #16181d; color: #fff; font-size: .875rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.25; white-space: nowrap; transition: transform 140ms var(--ease-out), background-color 140ms ease, border-color 140ms ease; }
 .landing-workspace-actionbar button:active { transform: scale(.97); }
 .landing-workspace-actionbar > span { display: inline-flex; align-items: center; gap: .3rem; color: #868b94; font: .58rem var(--font-mono), monospace; }
 
@@ -5986,6 +5974,12 @@ a {
   outline: none;
   border-color: var(--dash-accent);
   box-shadow: 0 0 0 3px rgba(47,125,246,.16) !important;
+}
+
+/* URL import owns focus styling on its field wrapper so it never draws a
+   second, competing ring around the input itself. */
+.dashboard-theme .url-import-field:focus {
+  box-shadow: none !important;
 }
 
 /* Quiet, mono section eyebrows like Cursor's group labels. */

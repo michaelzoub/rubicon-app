@@ -91,7 +91,7 @@ export function MetricTrend({
       : positive
         ? "text-[#74a888]"
         : "text-[#c98a83]";
-  const valueLabel = neutral || value === null ? "Flat" : `${value > 0 ? "+" : "−"}${Math.abs(Math.round(value))}%`;
+  const valueLabel = neutral || value === null ? "—" : `${value > 0 ? "+" : "−"}${Math.abs(Math.round(value))}%`;
 
   return (
     <span className={`inline-flex shrink-0 items-center justify-end gap-1 font-medium tabular-nums ${compact ? "text-[0.7rem]" : "text-xs"} ${tone}`}>

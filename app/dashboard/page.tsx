@@ -23,6 +23,7 @@ import type { AnalyticsDailyMetric, AnalyticsRecentRead, AnalyticsOverviewRespon
 import { atomicToUsd, formatUsdAtomicDisplay, formatUsdDisplay, formatUsdNumber } from "@/lib/rubicon/pricing";
 import type { Article } from "@/lib/rubicon/types";
 import { ACTIVE_CHAIN } from "@/lib/chain";
+import { CopyConfetti } from "./_components/copy-confetti";
 import { explorerAddressUrl, formatBalance, useNativeBalance } from "@/lib/onchain";
 import { WithdrawDialog } from "./_components/withdraw-dialog";
 import { DashboardDialog } from "./_components/overlays";
@@ -191,7 +192,6 @@ export default function OverviewPage() {
           label: "Agent reads",
           value: analytics.data.totals.agentReads,
           format: formatInt,
-          deltaPct: weeklyDeltas.reads,
           context: "Last 7 days",
         },
       ],
@@ -634,9 +634,9 @@ function ExportButton({
                 <button type="button" onClick={download} className="button button-primary justify-center text-sm" disabled={!pngUrl}>
                   <Download size={15} aria-hidden="true" /> Download
                 </button>
-                <button type="button" onClick={copyImage} className="button button-secondary justify-center text-sm" disabled={!pngUrl}>
+                <CopyConfetti onCopy={copyImage} disabled={!pngUrl} className="button button-secondary justify-center text-sm">
                   <Copy size={15} aria-hidden="true" /> {copyStatus === "copied" ? "Copied" : copyStatus === "downloaded" ? "Downloaded" : "Copy PNG"}
-                </button>
+                </CopyConfetti>
               </div>
               {copyStatus === "downloaded" && (
                 <p className="mt-2 text-xs text-[var(--muted)]">Image copy was blocked, so the PNG was downloaded instead.</p>

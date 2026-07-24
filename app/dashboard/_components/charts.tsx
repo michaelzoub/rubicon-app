@@ -95,7 +95,7 @@ export function ChartTooltip({
 
 export function ChartEmptyState({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="relative flex h-full min-h-44 items-center justify-center overflow-hidden border-t border-dashed border-[var(--line)] px-5 text-center">
+    <div className="relative flex h-full min-h-44 w-full items-center justify-center overflow-hidden border-t border-dashed border-[var(--line)] px-5 text-center">
       <div>
         <p className="text-sm font-medium text-[var(--ink)]">{title}</p>
         {description && <p className="dashboard-meta mt-1 max-w-sm text-pretty">{description}</p>}

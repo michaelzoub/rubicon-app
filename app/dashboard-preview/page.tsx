@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { buildEarningsDonutSlices, type TrendBar } from "../dashboard/_components/charts";
 import { DashboardOverviewContent, type DashboardOverviewProps } from "../dashboard/_components/overview-content";
@@ -78,6 +78,10 @@ const earningsSlices = buildEarningsDonutSlices(
 
 export default function DashboardPreviewPage() {
   const [previewWithdrawOpen, setPreviewWithdrawOpen] = useState(false);
+  const [singleArticle, setSingleArticle] = useState(false);
+  useEffect(() => {
+    setSingleArticle(new URLSearchParams(window.location.search).has("singleArticle"));
+  }, []);
   const overviewProps: DashboardOverviewProps = useMemo(
     () => ({
       greeting: "@wenkafka",
@@ -122,7 +126,7 @@ export default function DashboardPreviewPage() {
         { label: "Agent reads", value: recentAgentReads, format: formatInt, deltaPct: 11, context: "Last 7 days" },
       ],
       trendBars: earningsTrend,
-      topArticles: livePreviewArticles.map((article) => ({
+      topArticles: livePreviewArticles.slice(0, singleArticle ? 1 : undefined).map((article) => ({
         id: article.id,
         title: article.title,
         earnings: article.earnings,
@@ -165,7 +169,7 @@ export default function DashboardPreviewPage() {
         onRefresh: () => undefined,
       },
     }),
-    [],
+    [singleArticle],
   );
 
   return (

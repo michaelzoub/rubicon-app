@@ -129,4 +129,25 @@ test.describe("dashboard UI reliability", () => {
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
   });
+
+  test("single top article stays aligned with earnings activity", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/dashboard-preview?singleArticle=1");
+
+    const activity = page.getByRole("heading", { name: "Earnings activity" }).locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' dashboard-card ')][1]");
+    const topArticles = page.getByRole("heading", { name: "Top articles" }).locator("xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' dashboard-card ')][1]");
+    await expect(activity).toBeVisible();
+    await expect(topArticles).toBeVisible();
+    await expect(topArticles.getByRole("list", { name: "Top three articles" }).locator("li")).toHaveCount(1);
+
+    const activityBox = await activity.boundingBox();
+    const topArticlesBox = await topArticles.boundingBox();
+    expect(activityBox).not.toBeNull();
+    expect(topArticlesBox).not.toBeNull();
+    expect(activityBox!.width).toBeGreaterThan(700);
+    expect(topArticlesBox!.width).toBeGreaterThan(280);
+    expect(Math.abs(topArticlesBox!.y - activityBox!.y)).toBeLessThanOrEqual(1);
+
+    await page.screenshot({ path: "test-results/overview-single-top-article.png", fullPage: true });
+  });
 });
